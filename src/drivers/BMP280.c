@@ -315,7 +315,7 @@ bool BMP280_drv_init(ARM_DRIVER_I2C *i2c_drv)
         return false;
     }
     
-    if (tz10xx_drv_i2c->BusSpeed(ARM_I2C_BUS_SPEED_FAST) != ARM_I2C_OK) {
+    if (tz10xx_drv_i2c->BusSpeed(ARM_I2C_BUS_SPEED_STANDARD) != ARM_I2C_OK) {
         return false;
     }
     
