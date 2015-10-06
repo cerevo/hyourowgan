@@ -262,7 +262,7 @@ const BLELib_Service pwm_service = {
 /* BlueNinja Motion sensor Service */
 static uint16_t motion_enable_val;
 static uint8_t motion_val[36];
-static uint32_t gx, gy, gz, ax, ay, az;
+static int32_t gx, gy, gz, ax, ay, az;
 //Motion sensor
 const BLELib_Descriptor motion_desc = {
     GATT_UID_MOTION_DESC, 0x2902, 0, BLELIB_UUID_16,
@@ -679,21 +679,21 @@ static void ble_online_motion_sample(void)
     MPU9250_accel_val acel;
     
     if (MPU9250_drv_read_gyro(&gyro)) {
-        gx += gyro.raw_x;
-        gy += gyro.raw_y;
-        gz += gyro.raw_z;
+        gx += (int16_t)gyro.raw_x;
+        gy += (int16_t)gyro.raw_y;
+        gz += (int16_t)gyro.raw_z;
     }
     if (MPU9250_drv_read_accel(&acel)) {
-        ax += acel.raw_x;
-        ay += acel.raw_y;
-        az += acel.raw_z;
+        ax += (int16_t)acel.raw_x;
+        ay += (int16_t)acel.raw_y;
+        az += (int16_t)acel.raw_z;
     }
 }
 
 static void ble_online_motion_average(uint8_t cnt)
 {
     uint8_t offset;
-    uint16_t ave;
+    int16_t ave;
     
     MPU9250_magnetometer_val magm;
     
@@ -703,22 +703,22 @@ static void ble_online_motion_average(uint8_t cnt)
         offset = 18;
     }
     //Gyro: X
-    ave = gx / 5;
+    ave = gx / 10;
     memcpy(&motion_val[0  + offset], &ave, 2);
     //Gyro: Y
-    ave = gy / 5;
+    ave = gy / 10;
     memcpy(&motion_val[2  + offset], &ave, 2);
     //Gyro: Z
-    ave = gz / 5;
+    ave = gz / 10;
     memcpy(&motion_val[4  + offset], &ave, 2);
     //Accel: X
-    ave = ax / 5;
+    ave = ax / 10;
     memcpy(&motion_val[6  + offset], &ave, 2);
     //Accel: Y
-    ave = ay / 5;
+    ave = ay / 10;
     memcpy(&motion_val[8  + offset], &ave, 2);
     //Accel: Z
-    ave = az / 5;
+    ave = az / 10;
     memcpy(&motion_val[10 + offset], &ave, 2);
     
     gx = 0;
@@ -729,20 +729,38 @@ static void ble_online_motion_average(uint8_t cnt)
     az = 0;
     
     /* Magnetometer */
-    MPU9250_drv_read_magnetometer(&magm);
-    //Magnetometer: X
-    memcpy(&motion_val[12 + offset], &magm.raw_x, 2);
-    //Magnetometer: Y
-    memcpy(&motion_val[14 + offset], &magm.raw_y, 2);
-    //Magnetometer: Z
-    memcpy(&motion_val[16 + offset], &magm.raw_z, 2);
-    
+    if (MPU9250_drv_read_magnetometer(&magm)) {
+        //Magnetometer: X
+        memcpy(&motion_val[12 + offset], &magm.raw_x, 2);
+        //Magnetometer: Y
+        memcpy(&motion_val[14 + offset], &magm.raw_y, 2);
+        //Magnetometer: Z
+        memcpy(&motion_val[16 + offset], &magm.raw_z, 2);
+        sprintf(msg, "magm raw_x=%04x, raw_y=%04x, raw_z=%04x\r\n", magm.raw_x, magm.raw_y, magm.raw_z);
+        TZ01_console_puts(msg);
+    } else {
+        TZ01_console_puts("MPU9250_drv_read_magnetometer() failed.\r\n");
+    }
 }
 
 static void ble_online_motion_notify(void)
 {
-    TZ01_console_puts("GATT_UID_MOTION: Notify\r\n");
-    BLELib_notifyValue(GATT_UID_MOTION, motion_val, sizeof(motion_val));
+    for (int i = 0; i < (sizeof(motion_val) / 2); i++) {
+        if (motion_val[i] != 0) {
+            //Œv‘ªŒ‹‰Ê‚ª•ÛŽ‚ç‚ê‚Ä‚é
+            TZ01_console_puts("GATT_UID_MOTION: Notify\r\n");
+            BLELib_notifyValue(GATT_UID_MOTION, motion_val, sizeof(motion_val));
+            break;
+        }
+    }
+    
+    for (int i = 0; i < sizeof(motion_val); i++) {
+        sprintf(&msg[i * 2], "%02x", motion_val[i]);
+    }
+    msg[72] = '\r';
+    msg[73] = '\n';
+    msg[74] = '\0';
+    TZ01_console_puts(msg);
 }
 
 static bool is_adv = false;

@@ -56,7 +56,10 @@ static bool init(void)
     uint8_t id = 0;
     uint32_t val;
     
-    BLE_init_dev();
+    Usleep(250000);
+    if (BLE_init_dev() == 1) {
+        return false;
+    }
     TZ01_system_init();
     TZ01_console_init();
     
@@ -94,12 +97,14 @@ static bool init(void)
     
     //9軸モーションセンサー
     if (MPU9250_drv_init(&Driver_SPI3)) {
-        MPU9250_drv_start_maesure(MPU9250_BIT_ACCEL_FS_SEL_16G, MPU9250_BIT_GYRO_FS_SEL_2000DPS, MPU9250_BIT_DLPF_CFG_5HZ, MPU9250_BIT_A_DLPFCFG_5HZ);
+        MPU9250_drv_start_maesure(MPU9250_BIT_ACCEL_FS_SEL_16G, MPU9250_BIT_GYRO_FS_SEL_2000DPS, MPU9250_BIT_DLPF_CFG_20HZ, MPU9250_BIT_A_DLPFCFG_20HZ);
     } else {
         return false;
     }
     //気圧センサー
-    BMP280_drv_init(&Driver_I2C1);
+    if (BMP280_drv_init(&Driver_I2C1) == false) {
+        return false;
+    }
     
     //BLELib init
     BLE_init(id);
@@ -112,7 +117,12 @@ static bool init(void)
 int main(void)
 {
     /* Initialize */
-    init();
+    if (init() != true) {
+        TZ01_console_puts("init(): failed.\r\n");
+        Driver_GPIO.WritePin(TZ01_SYSTEM_PWSW_PORT_HLD, 0);
+        Driver_GPIO.WritePin(TZ01_SYSTEM_PWSW_PORT_LED, 0);
+        goto term;
+    }
     
     int div = Driver_PMU.GetPrescaler(PMU_CD_PPIER0);
     sprintf(msg, "SystemCoreClock=%ld PMU_CD_PPIER0 divider=%d\r\n", SystemCoreClock, div);
@@ -128,9 +138,8 @@ int main(void)
         }
         BLE_run();
     }
-    
     BLE_stop();
-    
+term:
     TZ01_console_puts("Program terminated.\r\n");
     return 0;
 }
