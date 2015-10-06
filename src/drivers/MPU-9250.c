@@ -141,6 +141,7 @@ bool MPU9250_drv_init(TZ10XX_DRIVER_SPI *spi_drv)
         {MPU9250_REG_PWR_MGMT_2,    0x3f},  /* Disable Accel & Gyro */
         {MPU9250_REG_INT_PIN_CFG,   0x30},  /* Pin config */
         {MPU9250_REG_I2C_MST_CTRL,  0x0D},  /* I2C multi-master / 400kHz */
+        {MPU9250_REG_USER_CTRL,     0x10},  /* reset I2C slave */
         {MPU9250_REG_USER_CTRL,     0x20},  /* I2C master mode */
         {0xff,                      0xff}
     };
