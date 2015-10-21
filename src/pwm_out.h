@@ -1,7 +1,10 @@
 #ifndef _PWM_OUT_H_
 #define _PWM_OUT_H_
 
-#define TIMER_CLK_DIV  (2)
+#define TIMER_CLK_DIV   (8)
+
+#define PWM_MIN_FREQ    (50)
+#define PWM_MAX_FREQ    (30000)
 
 typedef enum {
     PWM_OUT_0,

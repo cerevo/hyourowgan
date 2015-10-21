@@ -470,7 +470,7 @@ BLELib_RespForDemand writeinDemandCb(const uint8_t unique_id, const uint8_t *con
             break;
         }
         clock = ((uint32_t)value[3] << 24) | ((uint32_t)value[2] << 16) | ((uint32_t)value[1] << 8) | value[0];
-        if ((clock < 400) || (clock > 120000)) {
+        if ((clock < PWM_MIN_FREQ) || (clock > PWM_MAX_FREQ)) {
             break;
         }
         pwm_0_clock_val = clock;
@@ -485,7 +485,7 @@ BLELib_RespForDemand writeinDemandCb(const uint8_t unique_id, const uint8_t *con
             break;
         }
         memcpy(duty.buf, value, 4);        
-        if ((duty.val < 0) || (duty.val > 1)) {
+        if ((duty.val < 0.0) || (duty.val > 1.0)) {
             break;
         }
         pwm_0_duty_val = duty.val;
@@ -515,7 +515,7 @@ BLELib_RespForDemand writeinDemandCb(const uint8_t unique_id, const uint8_t *con
             break;
         }
         clock = ((uint32_t)value[3] << 24) | ((uint32_t)value[2] << 16) | ((uint32_t)value[1] << 8) | value[0];
-        if ((clock < 400) || (clock > 120000)) {
+        if ((clock < PWM_MIN_FREQ) || (clock > PWM_MAX_FREQ)) {
             break;
         }
         pwm_1_clock_val = clock;

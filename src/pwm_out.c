@@ -26,7 +26,7 @@ bool pwm_out_init(void)
     //タイマーの入力クロックを取得
     int div = Driver_PMU.GetPrescaler(PMU_CD_PPIER0);
     //// システムコアクロック / クロックドメイン`PMU_CD_PPIER0'での分周
-    INPUT_CLOCK = SystemCoreClock / div;
+    INPUT_CLOCK = (SystemCoreClock / div) / TIMER_CLK_DIV;
     
     for (int i = 0; advtmr[i] != NULL; i++) {
         /* AdvTMR0 */
@@ -34,7 +34,7 @@ bool pwm_out_init(void)
         advtmr[i]->PowerControl(ARM_POWER_FULL);
         advtmr[i]->Configure(16, TMR_COUNT_MODE_PERIODIC, TIMER_CLK_DIV);
         //PWMの設定
-        advtmr[i]->ConfigureTFF(TMR_TFF_MODE_CMP_TERM_TOGGLE, false, false);    //コンペアマッチしたら出力をトグルするよ
+        advtmr[i]->ConfigureTFF(TMR_TFF_MODE_CMP_TOGGLE, false, false);    //コンペアマッチしたら出力をトグルするよ
         advtmr[i]->EnableCompare(true);
         advtmr[i]->EnableTFF(true);
     }
@@ -50,7 +50,7 @@ bool pwm_out_start(PWM_OUT_CH ch, uint32_t clock, float duty)
         return false;   //初期化終わってない
     }
     
-    if ((clock < 400) || (clock > 120000)) {
+    if ((clock < PWM_MIN_FREQ) || (clock > PWM_MAX_FREQ)) {
         return false;   //クロックが範囲外
     }
     
