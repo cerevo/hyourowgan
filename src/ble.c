@@ -309,7 +309,7 @@ const BLELib_Characteristics *const airp_characteristics[] = {
     &airp_char
 };
 const BLELib_Service airp_service = {
-    GATT_UID_AIRP_SERVICE, 0x988ef07959ddcdfb, 0x00060004672711e5, BLELIB_UUID_128,
+    GATT_UID_AIRP_SERVICE, 0x988ef07959ddcdfb, 0x00060000672711e5, BLELIB_UUID_128,
     true, NULL, 0,
     airp_characteristics, 1
 };
