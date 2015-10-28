@@ -36,7 +36,6 @@ bool pwm_out_init(void)
         //PWMの設定
         advtmr[i]->ConfigureTFF(TMR_TFF_MODE_CMP_TOGGLE, false, false);    //コンペアマッチしたら出力をトグルするよ
         advtmr[i]->EnableCompare(true);
-        advtmr[i]->EnableTFF(true);
     }
     
     return true;
@@ -72,12 +71,14 @@ bool pwm_out_start(PWM_OUT_CH ch, uint32_t clock, float duty)
         advtmr[ch]->SetCompareValue(cmp, false);
         advtmr[ch]->Start(cnt);
     }
+    advtmr[ch]->EnableTFF(true);
     return true;
 }
 
 bool pwm_out_stop(PWM_OUT_CH ch)
 {
     advtmr[ch]->Stop();
+    advtmr[ch]->EnableTFF(false);
     return true;
 }
 
