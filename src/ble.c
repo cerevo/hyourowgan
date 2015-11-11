@@ -631,20 +631,53 @@ int BLE_init(uint8_t id)
     return ret;
 }
 
+static uint8_t hist_di16, hist_di17, hist_di18, hist_di19;
+static void di_state_update(void)
+{
+    uint32_t pin;
+    
+    Driver_GPIO.ReadPin(16, &pin);
+    hist_di16 = ((hist_di16 << 1) | pin) & 0x0f;
+    
+    Driver_GPIO.ReadPin(17, &pin);
+    hist_di17 = ((hist_di17 << 1) | pin) & 0x0f;
+
+    Driver_GPIO.ReadPin(18, &pin);
+    hist_di18 = ((hist_di18 << 1) | pin) & 0x0f;
+
+    Driver_GPIO.ReadPin(19, &pin);
+    hist_di19 = ((hist_di19 << 1) | pin) & 0x0f;
+}
+
 static void ble_online_gpio_update_val(void)
 {
     uint32_t pin;
     uint8_t di;
     
-    Driver_GPIO.ReadPin(16, &pin);
-    di = pin & 0x01;
-    Driver_GPIO.ReadPin(17, &pin);
-    di |= ((pin << 1) & 0x02);
-    Driver_GPIO.ReadPin(18, &pin);
-    di |= ((pin << 2) & 0x04);
-    Driver_GPIO.ReadPin(19, &pin);
-    di |= ((pin << 3) & 0x08);
+    di = gpio_val;
+    if (hist_di16 == 0x00) {
+        di &= ~0x01;
+    } else if (hist_di16 == 0x0f) {
+        di |= 0x01;
+    }
+    if (hist_di17 == 0x00) {
+        di &= ~0x02;
+    } else {
+        di |= 0x02;
+    }
+    if (hist_di18 == 0x00) {
+        di &= ~0x04;
+    } else {
+        di |= 0x04;
+    }
+    if (hist_di19 == 0x00) {
+        di &= ~0x08;
+    } else {
+        di |= 0x08;
+    }
     
+    sprintf(msg, "gpio_val=%02x di=%02x\r\n", gpio_val, di);
+    TZ01_console_puts(msg);
     if ((gpio_val & 0x0f) != di) {
         //入力に変更あり
         gpio_val &= 0xf0;
@@ -803,7 +836,12 @@ int BLE_run(void)
                     Driver_GPIO.WritePin(11, led_blink);
                 }
                 
-                //GPIO入力チェック(100, 300, 500, 700, 900ms)
+                //GPIO入力サンプリング(50ms毎)
+                if ((cnt % 5) == 0) {
+                    di_state_update();
+                }
+                
+                //GPIO入力通知(100, 300, 500, 700, 900ms)
                 if ((cnt % 20) == 10) {
                     ble_online_gpio_update_val();
                 }
