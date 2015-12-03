@@ -25,6 +25,7 @@ limitations under the License.
 #include <stdio.h>
 #include "TZ10xx.h"
 #include "PMU_TZ10xx.h"
+#include "GPIO_TZ10xx.h"
 #include "RNG_TZ10xx.h"
 
 #include "twic_interface.h"
@@ -42,6 +43,7 @@ typedef union {
 }   FLOAT_BUF;
 
 #define BNMSG_MTU    (40)
+static uint16_t current_mtu = 23;
 
 extern TZ10XX_DRIVER_PMU  Driver_PMU;
 extern TZ10XX_DRIVER_RNG  Driver_RNG;
@@ -391,11 +393,16 @@ void disconnectCb(const uint8_t status, const uint8_t reason)
 BLELib_RespForDemand mtuExchangeDemandCb(const uint16_t client_rx_mtu_size, uint16_t *resp_mtu_size)
 {
     *resp_mtu_size = BNMSG_MTU;
+    sprintf(msg, "%s(): client_rx_mtu_size=%d resp_mtu_size=%d\r\n", __func__, client_rx_mtu_size, *resp_mtu_size);
+    TZ01_console_puts(msg);
     return BLELIB_DEMAND_ACCEPT;
 }
 
 void mtuExchangeResultCb(const uint8_t status, const uint16_t negotiated_mtu_size)
 {
+    sprintf(msg, "Negotiated MTU size:%d\r\n", negotiated_mtu_size);
+    current_mtu = negotiated_mtu_size;
+    TZ01_console_puts(msg);
 }
 
 void notificationSentCb(const uint8_t unique_id)
@@ -622,13 +629,7 @@ int BLE_init(uint8_t id)
     //GPIO等ペリフェラルを初期状態に設定
     init_io_state();
     
-    /* initialize BLELib */
-    int ret;
-    BLELib_initialize(hrgn_bdaddr, BLELIB_BAUDRATE_2304, &tz01_common_callbacks, &tz01_server_callbacks, NULL, NULL);
-    ret = BLELib_registerService(hrgn_service_list, 6);
-    BLELib_setLowPowerMode(BLELIB_LOWPOWER_ON);
-
-    return ret;
+    return 0;
 }
 
 static uint8_t hist_di16, hist_di17, hist_di18, hist_di19;
@@ -676,8 +677,6 @@ static void ble_online_gpio_update_val(void)
         di |= 0x08;
     }
     
-    sprintf(msg, "gpio_val=%02x di=%02x\r\n", gpio_val, di);
-    TZ01_console_puts(msg);
     if ((gpio_val & 0x0f) != di) {
         //入力に変更あり
         gpio_val &= 0xf0;
@@ -727,31 +726,44 @@ static void ble_online_motion_average(uint8_t cnt)
 {
     uint8_t offset;
     int16_t ave;
+    int16_t div;
     
     MPU9250_magnetometer_val magm;
     
-    if (cnt == 50) {
-        offset = 0;
+    if (current_mtu == 40) {
+        //500ms average * 2
+        if (cnt == 50) {
+            offset = 0;
+        } else {
+            offset = 18;
+        }
+        div = 10;
     } else {
-        offset = 18;
+        //1000ms average
+        if (cnt == 50) {
+            //NOP 500ms
+            return;
+        }
+        offset = 0;
+        div = 20;
     }
     //Gyro: X
-    ave = gx / 10;
+    ave = gx / div;
     memcpy(&motion_val[0  + offset], &ave, 2);
     //Gyro: Y
-    ave = gy / 10;
+    ave = gy / div;
     memcpy(&motion_val[2  + offset], &ave, 2);
     //Gyro: Z
-    ave = gz / 10;
+    ave = gz / div;
     memcpy(&motion_val[4  + offset], &ave, 2);
     //Accel: X
-    ave = ax / 10;
+    ave = ax / div;
     memcpy(&motion_val[6  + offset], &ave, 2);
     //Accel: Y
-    ave = ay / 10;
+    ave = ay / div;
     memcpy(&motion_val[8  + offset], &ave, 2);
     //Accel: Z
-    ave = az / 10;
+    ave = az / div;
     memcpy(&motion_val[10 + offset], &ave, 2);
     
     gx = 0;
@@ -778,29 +790,38 @@ static void ble_online_motion_average(uint8_t cnt)
 
 static void ble_online_motion_notify(void)
 {
+    int val_len;
+    
+    if (current_mtu == 40) {
+        val_len = sizeof(motion_val);   //500ms average * 2
+    } else {
+        val_len = 18;                   //1000ms average
+    }
     for (int i = 0; i < (sizeof(motion_val) / 2); i++) {
         if (motion_val[i] != 0) {
             //計測結果が保持られてる
             TZ01_console_puts("GATT_UID_MOTION: Notify\r\n");
-            BLELib_notifyValue(GATT_UID_MOTION, motion_val, sizeof(motion_val));
+            BLELib_notifyValue(GATT_UID_MOTION, motion_val, val_len);
             break;
         }
     }
     
-    for (int i = 0; i < sizeof(motion_val); i++) {
+    int i;
+    for (i = 0; i < val_len; i++) {
         sprintf(&msg[i * 2], "%02x", motion_val[i]);
     }
-    msg[72] = '\r';
-    msg[73] = '\n';
-    msg[74] = '\0';
+    msg[i * 2] = '\r';
+    msg[i * 2 + 1] = '\n';
+    msg[i * 2 + 2] = '\0';
     TZ01_console_puts(msg);
 }
 
 static bool is_adv = false;
+static bool is_reg = false;
 static uint8_t led_blink = 0;
 static uint8_t cnt = 0;
 
-int BLE_run(void)
+int BLE_main(void)
 {
     int ret, res = 0;
     BLELib_State state;
@@ -812,15 +833,35 @@ int BLE_run(void)
 
     switch (state) {
         case BLELIB_STATE_UNINITIALIZED:
-        case BLELIB_STATE_INITIALIZED:
+            is_reg = false;
+            is_adv = false;
+            TZ01_console_puts("BLELIB_STATE_UNINITIALIZED\r\n");
+            ret = BLELib_initialize(hrgn_bdaddr, BLELIB_BAUDRATE_2304, &tz01_common_callbacks, &tz01_server_callbacks, NULL, NULL);
+            if (ret != BLELIB_OK) {
+                TZ01_console_puts("BLELib_initialize() failed.\r\n");
+                return -1;  //Initialize failed
+            }
             break;
-
+        case BLELIB_STATE_INITIALIZED:
+            if (is_reg == false) {
+                TZ01_console_puts("BLELIB_STATE_INITIALIZED\r\n");
+                BLELib_setLowPowerMode(BLELIB_LOWPOWER_ON);
+                if (BLELib_registerService(hrgn_service_list, 6) == BLELIB_OK) {
+                    is_reg = true;
+                } else {
+                    return -1;  //Register failed
+                }
+            }
+            break;
         case BLELIB_STATE_READY:
             if (is_adv == false) {
+                TZ01_console_puts("BLELIB_STATE_READY\r\n");
                 ret = BLELib_startAdvertising(bnmsg_advertising_data, sizeof(bnmsg_advertising_data), bnmsg_scan_resp_data, sizeof(bnmsg_scan_resp_data));
-                is_adv = true;
-                Driver_GPIO.WritePin(11, 1);
-                cnt = 0;
+                if (ret == BLELIB_OK) {
+                    is_adv = true;
+                    Driver_GPIO.WritePin(11, 1);
+                    cnt = 0;
+                }
             }
             break;
         case BLELIB_STATE_ADVERTISING:
@@ -885,6 +926,7 @@ int BLE_run(void)
     if (has_event) {
         ret = BLELib_run();
         if (ret != BLELIB_OK) {
+            res = -1;
             sprintf(msg, "BLELib_run() ret: %d\r\n", ret);
             TZ01_console_puts(msg);
         }
@@ -905,6 +947,7 @@ void BLE_stop(void)
         default:
             break;
     }
+    BLELib_finalize();
     Driver_GPIO.WritePin(11, 0);
 }
 

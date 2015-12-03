@@ -56,7 +56,7 @@ static bool init(void)
     uint8_t id = 0;
     uint32_t val;
     
-    Usleep(250000);
+    Usleep(500000);
     if (BLE_init_dev() == 1) {
         return false;
     }
@@ -109,8 +109,6 @@ static bool init(void)
     //BLELib init
     BLE_init(id);
     
-    TZ01_system_tick_start(USRTICK_NO_GPIO_INTERVAL, 100);
-    
     return true;
 }
 
@@ -133,10 +131,10 @@ int main(void)
             /* Power off operation detected */
             break;
         }
-        if (TZ01_system_tick_check_timeout(USRTICK_NO_GPIO_INTERVAL)) {
-            TZ01_system_tick_start(USRTICK_NO_GPIO_INTERVAL, 100);
+        
+        if (BLE_main() < 0) {
+            TZ01_console_puts("BLE_run() failed.\r\n");
         }
-        BLE_run();
     }
     BLE_stop();
 term:
