@@ -687,6 +687,7 @@ static void ble_online_gpio_update_val(void)
 
 static void ble_online_airp_notify(void)
 {
+    int ret;
     uint16_t temp;
     uint32_t airp;
     
@@ -701,8 +702,11 @@ static void ble_online_airp_notify(void)
     airp_val[4] = (airp >> 16) & 0xff;
     airp_val[5] = (airp >> 24) & 0xff;
     
-    BLELib_notifyValue(GATT_UID_AIRP, airp_val, sizeof(airp_val));
-    TZ01_console_puts("GATT_UID_AIRP: Notify\r\n");
+    ret = BLELib_notifyValue(GATT_UID_AIRP, airp_val, sizeof(airp_val));
+    if (ret != BLELIB_OK) {
+        sprintf(msg, "GATT_UID_AIRP: Notify failed. ret=%d\r\n", ret);
+        TZ01_console_puts(msg);
+    }
 }
 
 static void ble_online_motion_sample(void)
@@ -781,8 +785,6 @@ static void ble_online_motion_average(uint8_t cnt)
         memcpy(&motion_val[14 + offset], &magm.raw_y, 2);
         //Magnetometer: Z
         memcpy(&motion_val[16 + offset], &magm.raw_z, 2);
-        sprintf(msg, "magm raw_x=%04x, raw_y=%04x, raw_z=%04x\r\n", magm.raw_x, magm.raw_y, magm.raw_z);
-        TZ01_console_puts(msg);
     } else {
         TZ01_console_puts("MPU9250_drv_read_magnetometer() failed.\r\n");
     }
@@ -790,6 +792,7 @@ static void ble_online_motion_average(uint8_t cnt)
 
 static void ble_online_motion_notify(void)
 {
+    int ret;
     int val_len;
     
     if (current_mtu == 40) {
@@ -800,20 +803,14 @@ static void ble_online_motion_notify(void)
     for (int i = 0; i < (sizeof(motion_val) / 2); i++) {
         if (motion_val[i] != 0) {
             //Œv‘ªŒ‹‰Ê‚ª•ÛŽ‚ç‚ê‚Ä‚é
-            TZ01_console_puts("GATT_UID_MOTION: Notify\r\n");
-            BLELib_notifyValue(GATT_UID_MOTION, motion_val, val_len);
+            ret = BLELib_notifyValue(GATT_UID_MOTION, motion_val, val_len);
+            if (ret != BLELIB_OK) {
+                sprintf(msg, "GATT_UID_MOTION: Notify failed. ret=%d\r\n", ret);
+                TZ01_console_puts(msg);
+            }
             break;
         }
     }
-    
-    int i;
-    for (i = 0; i < val_len; i++) {
-        sprintf(&msg[i * 2], "%02x", motion_val[i]);
-    }
-    msg[i * 2] = '\r';
-    msg[i * 2 + 1] = '\n';
-    msg[i * 2 + 2] = '\0';
-    TZ01_console_puts(msg);
 }
 
 static bool is_adv = false;
