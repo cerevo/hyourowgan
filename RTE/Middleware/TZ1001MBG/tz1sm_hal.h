@@ -1,13 +1,13 @@
 /**
  * @file tz1sm_hal.h
- * @brief a header file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V1.0.0
+ * @brief a header file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.2.0
  * @date $LastChangedDate$
  * @note
  */
 
 /*
- * COPYRIGHT (C) 2014
+ * COPYRIGHT (C) 2014 2015
  * TOSHIBA CORPORATION SEMICONDUCTOR & STORAGE PRODUCTS COMPANY
  * ALL RIGHTS RESERVED.
  *
@@ -89,7 +89,9 @@
 #define TWIC_TYPES__TYPES
 #undef  TWIC_STDIO__STDIO
 #define TWIC_POSIX__POSIX
+#undef  TWIC_RTOS__CMSIS_RTOS
 #define TWIC_PMU__CMSIS_PMU
+#undef  TWIC_PMU__CMSIS_RTC
 #define TWIC_PMU__CMSIS_MISC
 #define TWIC_GPIO__CMSIS_GPIO
 #define TWIC_UART__CMSIS_UART
@@ -218,7 +220,7 @@ void tz1smHalDebugUartUnInit(void);
 #include "tz1sm_hal_cmsisrtos.h"
 #elif defined(TWIC_RTOS__FREERTOS)
 #include "tz1sm_hal_freertos.h"
-#elif defined(TWIC_RTOS__NONOS) || defined(TWIC_RTOS__FREERTOS_TICKLESS)
+#elif defined(TWIC_RTOS__NONOS)
 #include "tz1sm_hal_nonos.h"
 #else
 #error Please define runtime environment.
@@ -513,6 +515,20 @@ void tz1smHalRegisterCb(const tz1smHalCb_t * const cb);
  * Low:  Permit to Low Power mode,
  * High: Active mode */
 #define TZ1SM_HAL_GPIO_BLE_REQUEST_WAKE_UP 31
+
+/* Connect to BLE GPIO5. (IN/OUT)
+ * Low:  HCI mode,
+ * High: Application mode */
+#define TZ1SM_HAL_GPIO_BLE_CTS 11
+
+/* BLE GPIO5, MCU GPIO_11/CTS/PWM3 Workaround */
+/* Configuration settings for Driver_GPIO */
+typedef struct tz1sm_gpio_cts_configuration {
+  bool inheritance;
+  GPIO_DIRECTION dir;
+  GPIO_EVENT event;
+  GPIO_SignalEvent_t cb_event;
+} tz1sm_gpio_cts_configuration_t;
 
 /*
  * @brief

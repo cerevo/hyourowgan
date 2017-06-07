@@ -1,7 +1,7 @@
 /**
  * @file tz1sm_hal_freertos.h
- * @brief a header file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V0.0.3
+ * @brief a header file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.2.0
  * @date $LastChangedDate$
  * @note
  */

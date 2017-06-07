@@ -284,6 +284,9 @@ twicUtLeCeInit1(twicConnIface_t *cif, uint8_t *aret, uint8_t *wait_ms,
 {
   twicStatus_t status;
   uint8_t _ar;
+#if defined(TWIC_BLE_HWIP_V41)
+  /* Must not apply any patch. */
+#else  
   const uint8_t psb[] = {
     0x10, 0x25, 0x03, 0xd0, 0x6d, 0x0b, 0x00, 0x70, 0xb5, 0x05, 0x1c, 0x9b,
     0xf7, 0x8c, 0xfb, 0x04, 0x1c, 0x11, 0xd0, 0x60, 0x78, 0x01, 0x21, 0x09,
@@ -294,9 +297,21 @@ twicUtLeCeInit1(twicConnIface_t *cif, uint8_t *aret, uint8_t *wait_ms,
     0xb8, 0xfc, 0x04, 0x1c, 0x07, 0xd0, 0xe1, 0x68, 0x14, 0x23, 0xc8, 0x5e,
     0x4c, 0xf0, 0xf1, 0xfc, 0x20, 0x1c, 0x64, 0xf0, 0x98, 0xfc, 0x28, 0x1c,
     0x64, 0xf0, 0xfe, 0xfc, 0x70, 0xbc, 0x08, 0xbc, 0x18, 0x47};
+#endif
 
   if (NULL != wait_ms) *wait_ms = 0;
 
+#if defined(TWIC_BLE_HWIP_V41)
+  /* API needs to be in the loop to wait NOP. */
+  for (;twicUtPeekInApi(cif, TWIC_LECESETBAUDRATE, &_ar) != true;) {
+    status = twicIfLeCeSetBaudrate(cif, br, pu);
+    if (TWIC_STATUS_OK != status && TWIC_STATUS_UNDER_PROCESSING != status)
+      return status;
+    twicUtDoEvent();
+  }
+  if (NULL != aret) *aret = _ar;
+  if (_ar) return TWIC_STATUS_ERROR_IO;
+#else  
   /* API needs to be in the loop to wait NOP. */
   for (;twicUtPeekInApi(cif, TWIC_LECEPATCHBASE, &_ar) != true;) {
     status = twicIfLeCePatchBase(cif, sizeof(psb), psb);
@@ -327,7 +342,8 @@ twicUtLeCeInit1(twicConnIface_t *cif, uint8_t *aret, uint8_t *wait_ms,
     twicUtDoEvent();
   if (NULL != aret) *aret = _ar;
   if (_ar) return TWIC_STATUS_ERROR_IO;
-
+#endif
+  
   if (NULL != wait_ms) *wait_ms = 100;
 
   return TWIC_STATUS_OK;
@@ -408,6 +424,42 @@ twicUtLeCeInit2(twicConnIface_t *cif, uint8_t *aret, uint8_t *wait_ms,
   if (NULL != aret) *aret = _ar;
   if (_ar) return TWIC_STATUS_ERROR_IO;
 
+#if defined(TWIC_API_LEREADLOCALVERSIONINFORMATION)
+  status = twicIfLeReadLocalVersionInformation(cif);
+  if (TWIC_STATUS_OK != status) return status;
+  {
+    uint8_t v[23];
+    for (;twicUtPeekInApiWithValue(cif, TWIC_LEREADLOCALVERSIONINFORMATION,
+                                   &_ar, &v) != true;) twicUtDoEvent();
+    if (NULL != aret) *aret = _ar;
+    if (_ar) return TWIC_STATUS_ERROR_IO;
+    twicLog("HCI_Version 0x%02x\r\n", v[0]);
+    twicLog("HCI_Revison 0x%02x %02x\r\n", v[2], v[1]);
+    /* LMP/PAL_Version    : 1 byte
+     * Manufacturer_Name  : 2 byte
+     * LMP/PAL_Subversion : 2 byte */
+  }
+#endif
+  
+#if defined(TWIC_API_LECEREADFWVER)
+  status = twicIfLeCeReadFwVer(cif);
+  if (TWIC_STATUS_OK != status) return status;
+  {
+    uint8_t v[23];
+    for (;twicUtPeekInApiWithValue(cif, TWIC_LECEREADFWVER, &_ar, &v) != true;)
+      twicUtDoEvent();
+    if (NULL != aret) *aret = _ar;
+    if (_ar) return TWIC_STATUS_ERROR_IO;
+    /* twicLog("Data Type (expect 0x0f) 0x%02x\r\n", v[0]);
+       twicLog("0x%02x 0x%02x 0x%02x 0x%02x\r\n",v[1],v[2],v[3],v[4]);
+       twicLog("0x%02x 0x%02x 0x%02x 0x%02x\r\n",v[5],v[6],v[7],v[8]);
+       twicLog("0x%02x 0x%02x 0x%02x 0x%02x\r\n",v[9],v[10],v[11],v[12]);
+       twicLog("0x%02x 0x%02x 0x%02x 0x%02x\r\n",v[13],v[14],v[15],v[16]);
+       twicLog("0x%02x 0x%02x 0x%02x 0x%02x\r\n",v[17],v[18],v[19],v[20]); */
+    twicLog("%s\r\n",v + 1);
+  }
+#endif
+  
   status = twicIfLeCeFlowControl(cif, true);
   if (TWIC_STATUS_OK != status) return status;
   for (;twicUtPeekInApi(cif, TWIC_LECEFLOWCONTROL, &_ar) != true;)

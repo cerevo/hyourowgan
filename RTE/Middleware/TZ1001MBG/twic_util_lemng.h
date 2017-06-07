@@ -1,7 +1,7 @@
 /**
  * @file twic_util_lemng.h
- * @brief a source file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V1.0.0.FS (Free Sample - The information in this code is
+ * @brief a source file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.0.1.FS (Free Sample - The information in this code is
  * subject to change without notice and should not be construed as a
  * commitment by TOSHIBA CORPORATION SEMICONDUCTOR & STORAGE PRODUCTS
  * COMPANY.
@@ -72,6 +72,15 @@ extern twicStatus_t twicUtLeConnectionUpdate(twicConnIface_t * const cif,
                                              uint16_t conn_int_max,
                                              uint16_t slave_latency,
                                              uint16_t supervison_timeout);
+#if defined(TWIC_BLE_HWIP_V41)
+extern twicStatus_t twicUtLeConnectionParameterRequestReply(
+  twicConnIface_t * const cif, uint16_t conn_int_min,
+  uint16_t conn_int_max, uint16_t slave_latency, uint16_t supervison_timeout);
+
+extern twicStatus_t twicUtLeConnectionParameterRequestNegativeReply(
+  twicConnIface_t * const cif, const uint8_t reason);
+#endif
+
 extern twicStatus_t
 twicUtGattServerWriteCharacteristics(twicConnIface_t * const cif,
                                      const uint8_t cha, const uint16_t length,

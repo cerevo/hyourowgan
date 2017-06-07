@@ -1,7 +1,7 @@
 /**
  * @file twic_util_hrp.c
- * @brief a source file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V1.0.0.FS (Free Sample - The information in this code is
+ * @brief a source file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.0.1.FS (Free Sample - The information in this code is
  * subject to change without notice and should not be construed as a
  * commitment by TOSHIBA CORPORATION SEMICONDUCTOR & STORAGE PRODUCTS
  * COMPANY.
@@ -85,12 +85,14 @@ void twicUtHrpSetupService(void)
 
 static void twicUtHrpMeaNotification(void const *arg)
 {
+#if !defined(ATT_MAX_DATA_RATE)
   twic_util_hr_measurement[0] = 0x18; /* 1Byte (1001 LSB) */
   twic_util_hr_measurement[1] = bpm; /* 1Byte BPM */
   /* 2Byte Enery Expended */
   TWIC_SETHARF_LE(twic_util_hr_measurement + 2, (uint16_t)energy_expended);
   /* 2Byte RR interval */
   TWIC_SETHARF_LE(twic_util_hr_measurement + 4, rr_interval);
+#endif  
   flags.do_mea_notification = true;
 }
 
@@ -144,7 +146,8 @@ uint8_t twicUtHrpWrittenIn(uint8_t eidx, const twicAttValue_t *const arg)
   return 0;
 }
 
-uint8_t twicUtHrpReadOut(twicConnIface_t * const cif, uint8_t eidx, uint16_t num)
+uint8_t twicUtHrpReadOut(twicConnIface_t * const cif,
+                         uint8_t eidx, uint16_t num)
 {
   uint16_t max = eidx + num - 1;
   
@@ -173,14 +176,28 @@ void twicUtHrpTimerCleanup(void)
 void twicUtHrpRun(twicConnIface_t * const cif)
 {
   uint8_t aret;
-  
+
+#if !defined(ATT_MAX_DATA_RATE)
   if (true == flags.do_mea_notification && false == flags.congestion) {
+    /* flags.congestion = true; */
     aret = twicUtGattNotification(cif, EIDX_HR_MEASUREMENT,
                                   twic_util_hr_measurement,
                                   sizeof(twic_util_hr_measurement));
     if (0xB3 == aret) flags.congestion = true;
     flags.do_mea_notification = false;
   }
+#else
+  if (true == flags.do_mea_notification && false == flags.congestion) {
+    static uint8_t lso, mso;
+
+    /* flags.congestion = true; */
+    twic_util_hr_measurement[0] = lso ++;
+    twic_util_hr_measurement[CLIENT_ATT_MTU - 4] = mso ++;
+    twicUtGattNotification(cif, EIDX_HR_MEASUREMENT, twic_util_hr_measurement,
+                           sizeof(twic_util_hr_measurement));
+    if (0xB3 == aret) flags.congestion = true;
+  }
+#endif  
 }
 
 void twicUtHrpCongestionCheck(void)

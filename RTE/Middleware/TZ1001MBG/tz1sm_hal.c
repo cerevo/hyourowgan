@@ -1,7 +1,7 @@
 /**
  * @file tz1sm_hal.c
- * @brief a source file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V0.0.6
+ * @brief a source file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.2.0
  * @date $LastChangedDate$
  * @note
  */
@@ -50,11 +50,9 @@ extern TZ10XX_DRIVER_RTC Driver_RTC;
 #endif
 
 #if defined(TWIC_PMU__CMSIS_MISC)
-#if RTE_NOR
 #include "Driver_NOR.h"
 #include "NOR_TZ10xx.h"
 extern TZ10XX_DRIVER_NOR Driver_NOR0;
-#endif
 #if RTE_UART0
 #include "Driver_UART.h"
 extern ARM_DRIVER_UART Driver_UART0;
@@ -157,7 +155,7 @@ static const char *power_mode_string[] = {
   "RETENTION",
   "RTC",
   "STOP",
-	"SLEEPDEEP0",
+  "SLEEPDEEP0",
   "SLEEPDEEP1",
   "SLEEPDEEP2"
 };
@@ -256,10 +254,10 @@ int fputc(int ch, FILE *f)
   if (uart_dbg_tx_wp != uart_dbg_tx_rp) {
     if (uart_dbg_tx_wp >= uart_dbg_tx_rp) {
       rest_size = (TWIC_UART_DBG_TX_BUFFER_SIZE - uart_dbg_tx_wp) +
-        uart_dbg_tx_rp -1;
+        uart_dbg_tx_rp - 1;
     }
     else {
-      rest_size = uart_dbg_tx_rp - uart_dbg_tx_wp -1;
+      rest_size = uart_dbg_tx_rp - uart_dbg_tx_wp - 1;
     }
     
     if (0 == rest_size) {
@@ -582,7 +580,7 @@ tz1smHalTimerStart(tz1smHalTimerId timer_id, uint32_t millisec)
   return TZ1SM_HAL_STATUS_ERROR_OS;
 }
 
-tz1smHalStatus_t tz1smHalTimerStop(tz1smHalTimerId	timer_id)
+tz1smHalStatus_t tz1smHalTimerStop(tz1smHalTimerId timer_id)
 {
   tz1utListHead_t *node;
   tz1smHalTimer_t *timer;
@@ -665,7 +663,6 @@ void tz1smHalOsYeild(void)
 }
 
 #else
-
 
 TZ1UT_LIST_DEF(tz1sm_hal_timer_chain_root);
 static uint32_t tz1sm_hal_jiffies;
@@ -833,8 +830,16 @@ tz1smHalStatus_t tz1smHalLePmuStart(void)
   tz1smStartClock(TZ1SM_HAL_PCD_UART1|TZ1SM_HAL_PCD_PP1);
 #endif  
 #endif
+
   /* UARTCLK(PMU_CSM_UART2) must be less than 5/3 * PCLK(PMU_CD_PPIER2) */
+#if defined(TZ1XXX_BOARD_BLUEBIRD)
+  if (PMU_VOLTAGE_MODE_C != (Driver_PMU.GetVoltageMode()))
+    return TZ1SM_HAL_STATUS_ERROR_RESOURCE;
+  Driver_PMU.SetPrescaler(PMU_CD_UART2, 3);
+  Driver_PMU.SelectClockSource(PMU_CSM_UART2, PMU_CLOCK_SOURCE_OSC12M);
+#else
   tz1smStartClock(TZ1SM_HAL_PCD_UART2|TZ1SM_HAL_PCD_PP1);
+#endif
 #if 0
   //pmu_status = Driver_PMU.SelectClockSource(
   //PMU_CSM_UART2, PMU_CLOCK_SOURCE_SIOSC4M);
@@ -1028,7 +1033,7 @@ tz1smHalStatus_t tz1smHalInitializePcdSystem(void)
 
   Driver_PMU.SelectClockSource(PMU_CSM_MAIN, PMU_CLOCK_SOURCE_PLL);
 
-  Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 4); /* GPIO */
+  Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 12); /* GPIO */
   Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 0);
   Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 0);
 
@@ -1067,98 +1072,113 @@ tz1smHalStatus_t tz1smHalInitializePcdSystem(void)
  */
 tz1smHalStatus_t tz1smStartClock(const tz1smHalPcd_t pcd)
 {
-  if (TZ1SM_HAL_PCD_PP1 & pcd) {
-    Driver_PMU.SetPrescaler(PMU_CD_PPIER1,
-                            Driver_PMU.GetPrescaler(PMU_CD_PPIER0));
-  }
+	if (TZ1SM_HAL_PCD_PP1 & pcd) {
+		Driver_PMU.SetPrescaler(PMU_CD_PPIER1,
+						Driver_PMU.GetPrescaler(PMU_CD_PPIER0));
+	}
 
-  if (TZ1SM_HAL_PCD_UART0 & pcd) {
-    Driver_PMU.SelectClockSource(PMU_CSM_UART0, PMU_CLOCK_SOURCE_SIOSC4M);
-    Driver_PMU.SetPrescaler(PMU_CD_UART0, 1);
-  }
+	if (TZ1SM_HAL_PCD_UART0 & pcd) {
+		if (PMU_VOLTAGE_MODE_D == Driver_PMU.GetVoltageMode()) {
+			Driver_PMU.SelectClockSource(PMU_CSM_UART0, PMU_CLOCK_SOURCE_SIOSC4M);
+			Driver_PMU.SetPrescaler(PMU_CD_UART0, 1);
+		} else {
+			Driver_PMU.SetPrescaler(PMU_CD_UART0, 3);
+			Driver_PMU.SelectClockSource(PMU_CSM_UART0, PMU_CLOCK_SOURCE_OSC12M);
+		}
+	}
 
-  if (TZ1SM_HAL_PCD_UART1 & pcd)  {
-    Driver_PMU.SelectClockSource(PMU_CSM_UART1, PMU_CLOCK_SOURCE_SIOSC4M);
-    Driver_PMU.SetPrescaler(PMU_CD_UART1, 1);
-  }
+	if (TZ1SM_HAL_PCD_UART1 & pcd)  {
+		if (PMU_VOLTAGE_MODE_D == Driver_PMU.GetVoltageMode()) {
+			Driver_PMU.SelectClockSource(PMU_CSM_UART1, PMU_CLOCK_SOURCE_SIOSC4M);
+		    Driver_PMU.SetPrescaler(PMU_CD_UART1, 1);
+		} else {
+		    Driver_PMU.SetPrescaler(PMU_CD_UART1, 3);
+			Driver_PMU.SelectClockSource(PMU_CSM_UART1, PMU_CLOCK_SOURCE_OSC12M);
+		}
+	}
 
-  if (TZ1SM_HAL_PCD_UART2 & pcd) {
-    Driver_PMU.SelectClockSource(PMU_CSM_UART2, PMU_CLOCK_SOURCE_SIOSC4M);
-    Driver_PMU.SetPrescaler(PMU_CD_PPIER2,
-                            Driver_PMU.GetPrescaler(PMU_CD_PPIER0));
-    Driver_PMU.SetPrescaler(PMU_CD_UART2, 1);
-  }
+	if (TZ1SM_HAL_PCD_UART2 & pcd) {
+		if (PMU_VOLTAGE_MODE_D == Driver_PMU.GetVoltageMode()) {
+			Driver_PMU.SelectClockSource(PMU_CSM_UART2, PMU_CLOCK_SOURCE_SIOSC4M);
+			Driver_PMU.SetPrescaler(PMU_CD_UART2, 1);
+		} else {
+			Driver_PMU.SetPrescaler(PMU_CD_UART2, 3);
+			Driver_PMU.SelectClockSource(PMU_CSM_UART2, PMU_CLOCK_SOURCE_OSC12M);
+		}
+		Driver_PMU.SetPrescaler(PMU_CD_PPIER2,
+								Driver_PMU.GetPrescaler(PMU_CD_PPIER0));
+	}
 
-  if (TZ1SM_HAL_PCD_ADC12 & pcd) {
-    Driver_PMU.SelectClockSource(PMU_CSM_ADCC12, PMU_CLOCK_SOURCE_SIOSC4M);
-    Driver_PMU.SetPrescaler(PMU_CD_ADCC12, 1);
-  }
+	if (TZ1SM_HAL_PCD_ADC12 & pcd) {
+		Driver_PMU.SelectClockSource(PMU_CSM_ADCC12, PMU_CLOCK_SOURCE_SIOSC4M);
+		Driver_PMU.SetPrescaler(PMU_CD_ADCC12, 1);
+	}
 
-  if (TZ1SM_HAL_PCD_ADC24 & pcd) {
-    Driver_PMU.SelectClockSource(PMU_CSM_ADCC24, PMU_CLOCK_SOURCE_SIOSC4M);
-    Driver_PMU.SetPrescaler(PMU_CD_ADCC24, 1);
-  }
+	if (TZ1SM_HAL_PCD_ADC24 & pcd) {
+		Driver_PMU.SelectClockSource(PMU_CSM_ADCC24, PMU_CLOCK_SOURCE_SIOSC4M);
+		Driver_PMU.SetPrescaler(PMU_CD_ADCC24, 1);
+	}
 
-  if (TZ1SM_HAL_PCD_USB & pcd) {
-    Driver_PMU.SelectClockSource(PMU_CSM_USB,  PMU_CLOCK_SOURCE_PLL);
+	if (TZ1SM_HAL_PCD_USB & pcd) {
+		Driver_PMU.SelectClockSource(PMU_CSM_USB,  PMU_CLOCK_SOURCE_PLL);
 		Driver_PMU.SetPrescaler(PMU_CD_USBI, 1);
 		Driver_PMU.SetPrescaler(PMU_CD_USBB, 2);
-  }
+	}
 
-  if (TZ1SM_HAL_PCD_FLASH & pcd) {
-    Driver_PMU.SetPowerDomainState(PMU_PD_FLASH, PMU_PD_MODE_ON);
-    Driver_PMU.SetPrescaler(PMU_CD_SPIC, 1);
-  }
+	if (TZ1SM_HAL_PCD_FLASH & pcd) {
+		Driver_PMU.SetPowerDomainState(PMU_PD_FLASH, PMU_PD_MODE_ON);
+		Driver_PMU.SetPrescaler(PMU_CD_SPIC, 1);
+	}
 
-  if (TZ1SM_HAL_PCD_DMAC & pcd) {
-    Driver_PMU.SetPowerDomainState(PMU_PD_DMAC, PMU_PD_MODE_ON);
-  }
+	if (TZ1SM_HAL_PCD_DMAC & pcd) {
+		Driver_PMU.SetPowerDomainState(PMU_PD_DMAC, PMU_PD_MODE_ON);
+	}
 
-  if (TZ1SM_HAL_PCD_ENC & pcd) {
-    Driver_PMU.SetPowerDomainState(PMU_PD_ENCRYPT, PMU_PD_MODE_ON);
-  }
+	if (TZ1SM_HAL_PCD_ENC & pcd) {
+		Driver_PMU.SetPowerDomainState(PMU_PD_ENCRYPT, PMU_PD_MODE_ON);
+	}
 #if RTE_SPI0
-  if (TZ1SM_HAL_PCD_SPI0 & pcd) {
-    Driver_SPI0.PowerControl(ARM_POWER_FULL);
-  }
+	if (TZ1SM_HAL_PCD_SPI0 & pcd) {
+		Driver_SPI0.PowerControl(ARM_POWER_FULL);
+	}
 #endif
 #if RTE_SPI1
-  if (TZ1SM_HAL_PCD_SPI1 & pcd) {
-    Driver_SPI1.PowerControl(ARM_POWER_FULL);
-  }
+	if (TZ1SM_HAL_PCD_SPI1 & pcd) {
+		Driver_SPI1.PowerControl(ARM_POWER_FULL);
+	}
 #endif
 #if RTE_SPI2
-  if (TZ1SM_HAL_PCD_SPI2 & pcd) {
-    Driver_SPI2.PowerControl(ARM_POWER_FULL);
-  }
+	if (TZ1SM_HAL_PCD_SPI2 & pcd) {
+		Driver_SPI2.PowerControl(ARM_POWER_FULL);
+	}
 #endif
 #if RTE_SPI3
-  if (TZ1SM_HAL_PCD_SPI3 & pcd) {
-    Driver_SPI3.PowerControl(ARM_POWER_FULL);
-  }
+	if (TZ1SM_HAL_PCD_SPI3 & pcd) {
+		Driver_SPI3.PowerControl(ARM_POWER_FULL);
+	}
 #endif
 #if RTE_I2C0
-  if (TZ1SM_HAL_PCD_I2C0 & pcd) {
-    Driver_I2C0.PowerControl(ARM_POWER_FULL);
-  }
+	if (TZ1SM_HAL_PCD_I2C0 & pcd) {
+		Driver_I2C0.PowerControl(ARM_POWER_FULL);
+	}
 #endif
 #if RTE_I2C1
-  if (TZ1SM_HAL_PCD_I2C1 & pcd) {
-    Driver_I2C1.PowerControl(ARM_POWER_FULL);
-  }
+	if (TZ1SM_HAL_PCD_I2C1 & pcd) {
+		Driver_I2C1.PowerControl(ARM_POWER_FULL);
+	}
 #endif
 #if RTE_I2C2
-  if (TZ1SM_HAL_PCD_I2C2 & pcd) {
-    Driver_I2C2.PowerControl(ARM_POWER_FULL);
-  }
+	if (TZ1SM_HAL_PCD_I2C2 & pcd) {
+		Driver_I2C2.PowerControl(ARM_POWER_FULL);
+	}
 #endif
 #if RTE_WDT
-  if (TZ1SM_HAL_PCD_WDT & pcd) {
-    Driver_WDT.PowerControl(ARM_POWER_FULL);
-  }
+	if (TZ1SM_HAL_PCD_WDT & pcd) {
+		Driver_WDT.PowerControl(ARM_POWER_FULL);
+	}
 #endif
 	
-  return TZ1SM_HAL_STATUS_OK;
+	return TZ1SM_HAL_STATUS_OK;
 }
 
 /**
@@ -1168,22 +1188,22 @@ tz1smHalStatus_t tz1smStartClock(const tz1smHalPcd_t pcd)
  */
 tz1smHalStatus_t tz1smStopClock(const tz1smHalPcd_t pcd)
 {
-  uint32_t uc = 0;
-  
-  return tz1smHalPmuLowPowerPcd(
-    pcd, &uc, TZ1SM_HAL_OM_STOP, TZ1SM_HAL_VF_04M09, NULL);
+	uint32_t uc = 0;
+
+	return tz1smHalPmuLowPowerPcd(
+		pcd, &uc, TZ1SM_HAL_OM_STOP, TZ1SM_HAL_VF_04M09, NULL);
 }
 
 tz1smHalVf_t tz1smHalGetCurrentVf(void)
 {
-  return (tz1smHalVf_t)Driver_PMU.GetVoltageMode();
+	return (tz1smHalVf_t)Driver_PMU.GetVoltageMode();
 }
 
 tz1smHalStatus_t tz1smHalSetVf(const tz1smHalVf_t vf)
 {
-  PMU_VOLTAGE_MODE new_mode = (PMU_VOLTAGE_MODE)vf;
-  PMU_VOLTAGE_MODE old_mode = (PMU_VOLTAGE_MODE)tz1smHalGetCurrentVf();
-  
+	PMU_VOLTAGE_MODE new_mode = (PMU_VOLTAGE_MODE)vf;
+	PMU_VOLTAGE_MODE old_mode = (PMU_VOLTAGE_MODE)tz1smHalGetCurrentVf();
+
 	if (new_mode != old_mode) {
 #if defined(TZ1EM_ENABLE_LOG)
 		print_log("[[LOG_TZ1EM] Change VoltageMode : ");
@@ -1199,15 +1219,27 @@ tz1smHalStatus_t tz1smHalSetVf(const tz1smHalVf_t vf)
 		if (Driver_PMU.GetPrescaler(PMU_CD_PPIER2) != 0) {
 			Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 1);
 		}
-
+		
 		if (PMU_VOLTAGE_MODE_A == old_mode || PMU_VOLTAGE_MODE_B == old_mode) {
 			Driver_PMU.StopClockSource(PMU_CLOCK_SOURCE_PLL);
 		}
-
+		
 		if (PMU_VOLTAGE_MODE_D != old_mode && PMU_VOLTAGE_MODE_D == new_mode) {
+			if (0 != Driver_PMU.GetPrescaler(PMU_CD_UART0)) {
+				Driver_PMU.SelectClockSource(PMU_CSM_UART0, PMU_CLOCK_SOURCE_SIOSC4M);
+				Driver_PMU.SetPrescaler(PMU_CD_UART0, 1);
+			}
+			if (0 != Driver_PMU.GetPrescaler(PMU_CD_UART1)) {
+				Driver_PMU.SelectClockSource(PMU_CSM_UART1, PMU_CLOCK_SOURCE_SIOSC4M);
+				Driver_PMU.SetPrescaler(PMU_CD_UART1, 1);
+			}
+			if (0 != Driver_PMU.GetPrescaler(PMU_CD_UART2)) {
+				Driver_PMU.SelectClockSource(PMU_CSM_UART2, PMU_CLOCK_SOURCE_SIOSC4M);
+				Driver_PMU.SetPrescaler(PMU_CD_UART2, 1);
+			}
 			Driver_PMU.StopClockSource(PMU_CLOCK_SOURCE_OSC12M);
 		}
-
+		
 		Driver_PMU.SetVoltageMode(new_mode);
 
 		if (PMU_VOLTAGE_MODE_A == new_mode) {
@@ -1220,22 +1252,45 @@ tz1smHalStatus_t tz1smHalSetVf(const tz1smHalVf_t vf)
 			if (PMU_VOLTAGE_MODE_D == old_mode) {
 				Driver_PMU.StartClockSource(PMU_CLOCK_SOURCE_OSC12M);
 				while (Driver_PMU.GetClockSourceState(PMU_CLOCK_SOURCE_OSC12M) !=
-					PMU_CLOCK_SOURCE_STATE_RUNNING) {
-						/* DO NOTHING */
+					 PMU_CLOCK_SOURCE_STATE_RUNNING) {
+					/* DO NOTHING */
+				}
+				if (0 != Driver_PMU.GetPrescaler(PMU_CD_UART0)) {
+					Driver_PMU.SetPrescaler(PMU_CD_UART0, 3);
+					Driver_PMU.SelectClockSource(PMU_CSM_UART0, PMU_CLOCK_SOURCE_OSC12M);
+				}
+				if (0 != Driver_PMU.GetPrescaler(PMU_CD_UART1)) {
+					Driver_PMU.SetPrescaler(PMU_CD_UART1, 3);
+					Driver_PMU.SelectClockSource(PMU_CSM_UART1, PMU_CLOCK_SOURCE_OSC12M);
+				}
+				if (0 != Driver_PMU.GetPrescaler(PMU_CD_UART2)) {
+					Driver_PMU.SetPrescaler(PMU_CD_UART2, 3);
+					Driver_PMU.SelectClockSource(PMU_CSM_UART2, PMU_CLOCK_SOURCE_OSC12M);
 				}
 			}
 			if (PMU_VOLTAGE_MODE_A == new_mode || PMU_VOLTAGE_MODE_B == new_mode) {
 				Driver_PMU.StartClockSource(PMU_CLOCK_SOURCE_PLL);
 				while (PMU_CLOCK_SOURCE_STATE_RUNNING !=
-               Driver_PMU.GetClockSourceState(PMU_CLOCK_SOURCE_PLL)) {
+							 Driver_PMU.GetClockSourceState(PMU_CLOCK_SOURCE_PLL)) {
 				}
-				Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 4);
-				if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER1)) {
-					Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 4);
+				if (PMU_VOLTAGE_MODE_A == new_mode) {
+					Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 12);
+					if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER1)) {
+						Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 12);
+					}
+					if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER2)) {
+						Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 12);
+					}
+				} else {
+					Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 9);
+					if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER1)) {
+						Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 9);
+					}
+					if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER2)) {
+						Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 9);
+					}
 				}
-				if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER2)) {
-					Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 4);
-				}
+                
 				Driver_PMU.SelectClockSource(PMU_CSM_MAIN, PMU_CLOCK_SOURCE_PLL);
 			} else {
 				/* PMU_VOLTAGE_MODE_C */
@@ -1262,64 +1317,58 @@ tz1smHalStatus_t tz1smHalSetVf(const tz1smHalVf_t vf)
  * 
  */
 tz1smHalStatus_t tz1smHalPmuLowPowerPcd(
-  const tz1smHalPcd_t pcd, uint32_t * const uc, tz1smHalOm_t om,
-  tz1smHalVf_t vf, tz1smHalWakeupCb_t cb)
+    const tz1smHalPcd_t pcd, uint32_t * const uc, tz1smHalOm_t om,
+    tz1smHalVf_t vf, tz1smHalWakeupCb_t cb)
 {
-  uint32_t previous_wakeup_factor;
-  
-  if (TZ1SM_HAL_OM_SLEEP1 > om);
-  else if ((TZ1SM_HAL_PCD_SRAM1 & pcd) && !(TZ1SM_HAL_PCD_SRAM1 & *uc)) {
-    Driver_PMU.SetPowerDomainState(PMU_PD_SRAM1, PMU_PD_MODE_OFF);
-    *uc |= TZ1SM_HAL_PCD_SRAM1;
-  }
-#if RTE_NOR && defined(SOFTWARE_GATING)
-  if (TZ1SM_HAL_OM_SLEEP0 > om);
-  else if ((TZ1SM_HAL_PCD_FLASH & pcd) && !(TZ1SM_HAL_PCD_FLASH & *uc)) {
-    Driver_NOR0.PowerControl(ARM_POWER_OFF);
-    Driver_PMU.SetPrescaler(PMU_CD_SPIC, 0);
-    Driver_PMU.SetPowerDomainState(PMU_PD_FLASH, PMU_PD_MODE_OFF);
-    *uc |= TZ1SM_HAL_PCD_FLASH;
-  }
-#endif
+    uint32_t previous_wakeup_factor;
+    
+    if (TZ1SM_HAL_OM_SLEEP1 > om);
+    else if ((TZ1SM_HAL_PCD_SRAM1 & pcd) && !(TZ1SM_HAL_PCD_SRAM1 & *uc)) {
+        Driver_PMU.SetPowerDomainState(PMU_PD_SRAM1, PMU_PD_MODE_OFF);
+        *uc |= TZ1SM_HAL_PCD_SRAM1;
+    }
+    if (TZ1SM_HAL_OM_SLEEP0 > om);
+    else if ((TZ1SM_HAL_PCD_FLASH & pcd) && !(TZ1SM_HAL_PCD_FLASH & *uc)) {
+        Driver_NOR0.PowerControl(ARM_POWER_OFF);
+		Driver_PMU.SetPrescaler(PMU_CD_SPIC, 0);
+        Driver_PMU.SetPowerDomainState(PMU_PD_FLASH, PMU_PD_MODE_OFF);
+        Driver_PMU.SetPowerDomainStateLowPowerMode(PMU_PD_FLASH, PMU_PD_MODE_OFF, PMU_PD_MODE_OFF, PMU_PD_MODE_OFF);
+        *uc |= TZ1SM_HAL_PCD_FLASH;
+    }
 #if RTE_UART0 && defined(SOFTWARE_GATING)
-  if (TZ1SM_HAL_OM_SLEEP2 > om);
-  else if ((TZ1SM_HAL_PCD_UART0 & pcd) && !(TZ1SM_HAL_PCD_UART0 & *uc)) {
-    Driver_UART0.PowerControl(ARM_POWER_LOW);
-    Driver_PMU.SetPrescaler(PMU_CD_UART0, 0);
-    *uc |= TZ1SM_HAL_PCD_UART0;
-  }
+    if (TZ1SM_HAL_OM_SLEEP2 > om);
+    else if ((TZ1SM_HAL_PCD_UART0 & pcd) && !(TZ1SM_HAL_PCD_UART0 & *uc)) {
+        Driver_UART0.PowerControl(ARM_POWER_LOW);
+        *uc |= TZ1SM_HAL_PCD_UART0;
+    }
 #endif
 #if RTE_UART1 && defined(SOFTWARE_GATING)
-  if (TZ1SM_HAL_OM_SLEEP2 > om);
-  else if ((TZ1SM_HAL_PCD_UART1 & pcd) && !(TZ1SM_HAL_PCD_UART1 & *uc)) {
-    Driver_UART1.PowerControl(ARM_POWER_LOW);
-    Driver_PMU.SetPrescaler(PMU_CD_UART1, 0);
-    *uc |= TZ1SM_HAL_PCD_UART1;
-  }
+    if (TZ1SM_HAL_OM_SLEEP2 > om);
+    else if ((TZ1SM_HAL_PCD_UART1 & pcd) && !(TZ1SM_HAL_PCD_UART1 & *uc)) {
+        Driver_UART1.PowerControl(ARM_POWER_LOW);
+        *uc |= TZ1SM_HAL_PCD_UART1;
+    }
 #endif
 #if RTE_UART2
-  if (TZ1SM_HAL_OM_SLEEP2 > om);
-  else if ((TZ1SM_HAL_PCD_UART2 & pcd) && !(TZ1SM_HAL_PCD_UART2 & *uc)) {
-    Driver_UART2.PowerControl(ARM_POWER_LOW);
-    /* Do not touch clock of the UART2 like this:
-       Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 0);
-       Driver_PMU.SetPrescaler(PMU_CD_UART2, 0); */
-    *uc |= TZ1SM_HAL_PCD_UART2;
-  }
+    if (TZ1SM_HAL_OM_SLEEP2 > om);
+    else if ((TZ1SM_HAL_PCD_UART2 & pcd) && !(TZ1SM_HAL_PCD_UART2 & *uc)) {
+        Driver_UART2.PowerControl(ARM_POWER_LOW);
+        *uc |= TZ1SM_HAL_PCD_UART2;
+    }
 #endif
-
+    
 #if RTE_ADCC12 && defined(SOFTWARE_GATING)
-  if (TZ1SM_HAL_OM_SLEEP2 > om);
-  else if ((TZ1SM_HAL_PCD_ADC12 & pcd) && !(TZ1SM_HAL_PCD_ADC12 & *uc)) {
-    Driver_ADCC12.PowerControl(ARM_POWER_OFF);
-    Driver_PMU.SetPowerDomainState(PMU_PD_ADCC12, PMU_PD_MODE_OFF);
-    *uc |= TZ1SM_HAL_PCD_ADC12;
-  }
+    if (TZ1SM_HAL_OM_SLEEP2 > om);
+    else if ((TZ1SM_HAL_PCD_ADC12 & pcd) && !(TZ1SM_HAL_PCD_ADC12 & *uc)) {
+        Driver_ADCC12.PowerControl(ARM_POWER_OFF);
+        Driver_PMU.SetPowerDomainState(PMU_PD_ADCC12, PMU_PD_MODE_OFF);
+        *uc |= TZ1SM_HAL_PCD_ADC12;
+    }
 #endif
 #if RTE_ADCC24 && defined(SOFTWARE_GATING)
-  if (TZ1SM_HAL_OM_SLEEP2 > om);
-  else if ((TZ1SM_HAL_PCD_ADC24 & pcd) && !(TZ1SM_HAL_PCD_ADC24 & *uc)) {
-    Driver_ADCC24.PowerControl(ARM_POWER_OFF);
+    if (TZ1SM_HAL_OM_SLEEP2 > om);
+    else if ((TZ1SM_HAL_PCD_ADC24 & pcd) && !(TZ1SM_HAL_PCD_ADC24 & *uc)) {
+        Driver_ADCC24.PowerControl(ARM_POWER_OFF);
     Driver_PMU.SetPowerDomainState(PMU_PD_ADCC24, PMU_PD_MODE_OFF);
     *uc |= TZ1SM_HAL_PCD_ADC24;
   }
@@ -1445,36 +1494,28 @@ tz1smHalStatus_t tz1smHalPmuHighPowerPcd(
     Driver_PMU.SetPowerDomainState(PMU_PD_SRAM1, PMU_PD_MODE_ON);
     *uc &= ~TZ1SM_HAL_PCD_SRAM1;
   }
-#if RTE_NOR && defined(SOFTWARE_GATING)
   if ((TZ1SM_HAL_PCD_FLASH & pcd) && (TZ1SM_HAL_PCD_FLASH & *uc)) {
     Driver_PMU.SetPowerDomainState(PMU_PD_FLASH, PMU_PD_MODE_ON);
     Driver_PMU.SetPrescaler(PMU_CD_SPIC, 1);
     *uc &= ~TZ1SM_HAL_PCD_FLASH;
   }
-#endif
 #if RTE_UART0 && defined(SOFTWARE_GATING)
-  if ((TZ1SM_HAL_PCD_UART0 & pcd) && (TZ1SM_HAL_PCD_UART0 & *uc)) {
-    Driver_PMU.SetPrescaler(PMU_CD_UART0, 1);
-    Driver_UART0.PowerControl(ARM_POWER_FULL);
-    *uc &= ~TZ1SM_HAL_PCD_UART0;
-  }
+	if ((TZ1SM_HAL_PCD_UART0 & pcd) && (TZ1SM_HAL_PCD_UART0 & *uc)) {
+		Driver_UART0.PowerControl(ARM_POWER_FULL);
+		*uc &= ~TZ1SM_HAL_PCD_UART0;
+	}
 #endif
 #if RTE_UART1 && defined(SOFTWARE_GATING)
-  if ((TZ1SM_HAL_PCD_UART1 & pcd) && (TZ1SM_HAL_PCD_UART1 & *uc)) {
-    Driver_PMU.SetPrescaler(PMU_CD_UART1, 1);
-    Driver_UART1.PowerControl(ARM_POWER_FULL);
-    *uc &= ~TZ1SM_HAL_PCD_UART1;
-  }
+	if ((TZ1SM_HAL_PCD_UART1 & pcd) && (TZ1SM_HAL_PCD_UART1 & *uc)) {
+		Driver_UART1.PowerControl(ARM_POWER_FULL);
+		*uc &= ~TZ1SM_HAL_PCD_UART1;
+	}
 #endif
 #if RTE_UART2
-  if ((TZ1SM_HAL_PCD_UART2 & pcd) && (TZ1SM_HAL_PCD_UART2 & *uc)) {
-    /* Do not touch clock of the UART2 like this:
-       Driver_PMU.SetPrescaler(PMU_CD_PPIER2,
-       Driver_PMU.GetPrescaler(PMU_CD_PPIER0));
-       Driver_PMU.SetPrescaler(PMU_CD_UART2, 1); */
-    Driver_UART2.PowerControl(ARM_POWER_FULL);
-    *uc &= ~TZ1SM_HAL_PCD_UART2;
-  }
+	if ((TZ1SM_HAL_PCD_UART2 & pcd) && (TZ1SM_HAL_PCD_UART2 & *uc)) {
+		Driver_UART2.PowerControl(ARM_POWER_FULL);
+		*uc &= ~TZ1SM_HAL_PCD_UART2;
+	}
 #endif
 #if RTE_ADCC12 && defined(SOFTWARE_GATING)
   if ((TZ1SM_HAL_PCD_ADC12 & pcd) && (TZ1SM_HAL_PCD_ADC12 & *uc)) {
@@ -1582,29 +1623,29 @@ tz1smHalConfigureWakeup(const uint32_t factor, const tz1smHalWe_t event)
 
 tz1smHalStatus_t tz1smHalEnableWakeup(const uint32_t factor, const bool enable)
 {
-  PMU_STATUS pmu_status;
-  
-  if (TZ1SM_HAL_ACT_FACTOR_NONE == factor)
-    return TZ1SM_HAL_STATUS_OK;
+	PMU_STATUS pmu_status;
+	
+	if (TZ1SM_HAL_ACT_FACTOR_NONE == factor)
+		return TZ1SM_HAL_STATUS_OK;
 
-  pmulv->IRQ_STATUS = factor;
+	pmulv->IRQ_STATUS = factor;
 
-  pmu_status = Driver_PMU.EnableWakeup(factor, enable);
-  if (PMU_OK != pmu_status)
-    return TZ1SM_HAL_STATUS_ERROR_DRIVER;
+	pmu_status = Driver_PMU.EnableWakeup(factor, enable);
+	if (PMU_OK != pmu_status)
+		return TZ1SM_HAL_STATUS_ERROR_DRIVER;
 
-  return TZ1SM_HAL_STATUS_OK;
+	return TZ1SM_HAL_STATUS_OK;
 }
 
 tz1smHalStatus_t tz1smHalOperationMode(tz1smHalOm_t mode)
 {
-  PMU_STATUS pmu_status;
+	PMU_STATUS pmu_status;
 	PMU_VOLTAGE_MODE voltage_mode;
 	PMU_POWER_MODE power_mode;
 
-  if (TZ1SM_HAL_OM_ACTIVE == mode || TZ1SM_HAL_OM_NONE == mode)
-    return TZ1SM_HAL_STATUS_OK;
-		
+	if (TZ1SM_HAL_OM_ACTIVE == mode || TZ1SM_HAL_OM_NONE == mode)
+		return TZ1SM_HAL_STATUS_OK;
+
 	if ((0x80 & mode) == 0x80) {
 		mode &= 0x7f;
 		if (TZ1SM_HAL_OM_SLEEP2 == mode) {
@@ -1620,58 +1661,88 @@ tz1smHalStatus_t tz1smHalOperationMode(tz1smHalOm_t mode)
 		power_mode = (PMU_POWER_MODE)mode;
 	}
 #if defined(TZ1EM_ENABLE_LOG)
-		print_log("[[LOG_TZ1EM] Change PowerMode : ");
-		print_log(power_mode_string[power_mode]);
-		print_log("]\r\n");
+	print_log("[[LOG_TZ1EM] Change PowerMode : ");
+	print_log(power_mode_string[power_mode]);
+	print_log("]\r\n");
 #endif
-	
+
 	pmu_status = Driver_PMU.SetPowerMode(power_mode);
 
-  /* release retention state of output buffer */
-  /* RetainOutputBuffer */
-  Driver_PMU.RetainOutputBuffer(PMU_PD_AON_PM, 0);
-  Driver_PMU.RetainOutputBuffer(PMU_PD_AON_PP1, 0);
+	/* release retention state of output buffer */
+	/* RetainOutputBuffer */
+	Driver_PMU.RetainOutputBuffer(PMU_PD_AON_PM, 0);
+	Driver_PMU.RetainOutputBuffer(PMU_PD_AON_PP1, 0);
 
 	if (PMU_ERROR_IGNORED == pmu_status) {
 		return TZ1SM_HAL_STATUS_IGNORE;
 	} else if (PMU_OK != pmu_status) {
 		return TZ1SM_HAL_STATUS_ERROR_DRIVER;
-  }
-	
+	}
+
 	voltage_mode = Driver_PMU.GetVoltageMode();
 	if (TZ1SM_HAL_OM_SLEEP2 < mode) {
-	  if (PMU_VOLTAGE_MODE_A == voltage_mode) {
-      Driver_PMU.SetPLLFrequency(48000000); /* 48MHz */
-    } else if (PMU_VOLTAGE_MODE_B == voltage_mode) {
-      Driver_PMU.SetPLLFrequency(36000000); /* 36MHz */
-    }
+		if (voltage_mode != PMU_VOLTAGE_MODE_D) {
+			Driver_PMU.StartClockSource(PMU_CLOCK_SOURCE_OSC12M);
+			while (Driver_PMU.GetClockSourceState(PMU_CLOCK_SOURCE_OSC12M)
+				!= PMU_CLOCK_SOURCE_STATE_RUNNING) {
+				/* DO NOTHING */
+			}
 
-    if (voltage_mode != PMU_VOLTAGE_MODE_D) {
-      Driver_PMU.StartClockSource(PMU_CLOCK_SOURCE_OSC12M);
-      while (Driver_PMU.GetClockSourceState(PMU_CLOCK_SOURCE_OSC12M)
-             != PMU_CLOCK_SOURCE_STATE_RUNNING) {
-        /* DO NOTHING */
-      }
-      if (PMU_VOLTAGE_MODE_A == voltage_mode ||
-          PMU_VOLTAGE_MODE_B == voltage_mode) {
-        Driver_PMU.StartClockSource(PMU_CLOCK_SOURCE_PLL);
-        while (Driver_PMU.GetClockSourceState(PMU_CLOCK_SOURCE_PLL)
-               != PMU_CLOCK_SOURCE_STATE_RUNNING) {
-          /* DO NOTHING */
-        }
-        Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 4);
-        Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 4);
-        Driver_PMU.SelectClockSource(PMU_CSM_MAIN, PMU_CLOCK_SOURCE_PLL);
-      } else {
-        /* PMU_VOLTAGE_MODE_C */
-        Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 3);
-        Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 3);
-        Driver_PMU.SelectClockSource(PMU_CSM_MAIN, PMU_CLOCK_SOURCE_OSC12M);
-      }
-	  }
+			if (PMU_VOLTAGE_MODE_A == voltage_mode) {
+				Driver_PMU.SetPLLFrequency(48000000); /* 48MHz */
+			} else if (PMU_VOLTAGE_MODE_B == voltage_mode) {
+				Driver_PMU.SetPLLFrequency(36000000); /* 36MHz */
+			}
+
+			Driver_PMU.SetPrescaler(PMU_CD_UART0, 3);
+			Driver_PMU.SelectClockSource(PMU_CSM_UART0, PMU_CLOCK_SOURCE_OSC12M);
+			
+			Driver_PMU.SetPrescaler(PMU_CD_UART1, 3);
+			Driver_PMU.SelectClockSource(PMU_CSM_UART1, PMU_CLOCK_SOURCE_OSC12M);
+			
+			Driver_PMU.SetPrescaler(PMU_CD_UART2, 3);
+			Driver_PMU.SelectClockSource(PMU_CSM_UART2, PMU_CLOCK_SOURCE_OSC12M);
+
+			if (PMU_VOLTAGE_MODE_A == voltage_mode ||
+				PMU_VOLTAGE_MODE_B == voltage_mode) {
+				/* PMU_VOLTAGE_MODE_A or PMU_VOLTAGE_MODE_B */
+				Driver_PMU.StartClockSource(PMU_CLOCK_SOURCE_PLL);
+				while (Driver_PMU.GetClockSourceState(PMU_CLOCK_SOURCE_PLL)
+					!= PMU_CLOCK_SOURCE_STATE_RUNNING) {
+					/* DO NOTHING */
+				}
+				if (PMU_VOLTAGE_MODE_A == voltage_mode) {
+					Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 12);
+					if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER1)) {
+						Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 12);
+					}
+					if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER2)) {
+						Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 12);
+					}
+				} else {
+					Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 9);
+					if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER1)) {
+						Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 9);
+					}
+					if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER2)) {
+						Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 9);
+					}
+				}
+              Driver_PMU.SelectClockSource(PMU_CSM_MAIN, PMU_CLOCK_SOURCE_PLL);
+			} else {
+				/* PMU_VOLTAGE_MODE_C */
+				Driver_PMU.SetPrescaler(PMU_CD_PPIER0, 3);
+				if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER1)) {
+                    Driver_PMU.SetPrescaler(PMU_CD_PPIER1, 3);
+                }
+                if (0 != Driver_PMU.GetPrescaler(PMU_CD_PPIER2)) {
+                    Driver_PMU.SetPrescaler(PMU_CD_PPIER2, 3);
+                }
+				Driver_PMU.SelectClockSource(PMU_CSM_MAIN, PMU_CLOCK_SOURCE_OSC12M);
+			}
+		}
 	}
-	
-  return TZ1SM_HAL_STATUS_OK;
+	return TZ1SM_HAL_STATUS_OK;
 }
 
 #else
@@ -1777,6 +1848,19 @@ void tz1smHalRegisterCb(const tz1smHalCb_t * const cb)
  * the following functions. Coding of the following functions is
  * carried out using CMSIS API. */
 
+tz1sm_gpio_cts_configuration_t tz1sm_gpio_cts_setup;
+static GPIO_STATUS tz1smHalGpioConfigure(uint32_t pin, GPIO_DIRECTION dir,
+                                         GPIO_EVENT event,
+                                         GPIO_SignalEvent_t cb_event)
+{
+  if (TZ1SM_HAL_GPIO_BLE_CTS == pin) {
+    tz1sm_gpio_cts_setup.inheritance = true;
+    tz1sm_gpio_cts_setup.dir = dir;
+    tz1sm_gpio_cts_setup.event = event;
+    tz1sm_gpio_cts_setup.cb_event = cb_event;
+  }
+  return Driver_GPIO.Configure(pin, dir, event, cb_event);
+}
 
 /*
  * @brief
@@ -1796,7 +1880,7 @@ void tz1smHalGpioInit(void)
   if (GPIO_OK != sts)
     TWIC_GPIO_ERROR("PowerControl(ARM_POWER_FULL)=%d\r\n", sts);
   /* Reset Pin Configuration */
-  sts = Driver_GPIO.Configure(TZ1SM_HAL_GPIO_BLE_RESETX,
+  sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_RESETX,
                               GPIO_DIRECTION_OUTPUT_2MA, GPIO_EVENT_DISABLE,
                               NULL);
   if (GPIO_OK != sts) {
@@ -1806,7 +1890,7 @@ void tz1smHalGpioInit(void)
   tz1smHalGpioBleReset(true);
 
 #if defined(TWIC_LECE_DCDCEN)
-  sts = Driver_GPIO.Configure(TWIC_LECE_DCDCEN_GPIO_NUMBER,
+  sts = tz1smHalGpioConfigure(TWIC_LECE_DCDCEN_GPIO_NUMBER,
                               GPIO_DIRECTION_OUTPUT_2MA, GPIO_EVENT_DISABLE,
                               NULL);
   if (GPIO_OK != sts) {
@@ -1897,19 +1981,20 @@ tz1smHalStatus_t tz1smHalGpioBleReset(const bool reset)
 {
   GPIO_STATUS sts;
   tz1smHalStatus_t ret_sts = TZ1SM_HAL_STATUS_OK;
-  TZ10XX_DRIVER_GPIO *drv = &Driver_GPIO;
 
   if (false == reset) {
     /* no reset, configuration GPIO for Power On */
 #if defined(TZ1SM_HAL_GPIO_BLE_STATUS)
 #if defined(TWIC_LECE_ISR_LOWPOWER_STATUS_EVENT)
-    sts = drv->Configure(TZ1SM_HAL_GPIO_BLE_STATUS,
-                         GPIO_DIRECTION_INPUT_PULL_UP, GPIO_EVENT_EDGE_NEG,
-                         tz1smHalIsrBleStatus);
+    sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_STATUS,
+                                GPIO_DIRECTION_INPUT_PULL_UP,
+                                GPIO_EVENT_EDGE_NEG,
+                                tz1smHalIsrBleStatus);
 #else
-    sts = drv->Configure(TZ1SM_HAL_GPIO_BLE_STATUS,
-                         GPIO_DIRECTION_INPUT_PULL_UP, GPIO_EVENT_DISABLE,
-                         NULL);
+    sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_STATUS,
+                                GPIO_DIRECTION_INPUT_PULL_UP,
+                                GPIO_EVENT_DISABLE,
+                                NULL);
 #endif
     if (GPIO_OK != sts) {
       TWIC_GPIO_ERROR("Conf(TZ1SM_HAL_GPIO_BLE_STATUS) = %d\r\n", sts);
@@ -1919,13 +2004,15 @@ tz1smHalStatus_t tz1smHalGpioBleReset(const bool reset)
 #endif
 #if defined(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP)
 #if defined(TWIC_LECE_ISR_LOWPOWER_WAKEUP)
-    sts = drv->Configure(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP,
-                         GPIO_DIRECTION_INPUT_PULL_UP, GPIO_EVENT_EDGE_BOTH,
-                         tz1smHalIsrBleHostWakeup);
+    sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP,
+                                GPIO_DIRECTION_INPUT_PULL_UP,
+                                GPIO_EVENT_EDGE_BOTH,
+                                tz1smHalIsrBleHostWakeup);
 #else
-    sts = drv->Configure(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP,
-                         GPIO_DIRECTION_INPUT_PULL_UP, GPIO_EVENT_DISABLE,
-                         NULL);
+    sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP,
+                                GPIO_DIRECTION_INPUT_PULL_UP,
+                                GPIO_EVENT_DISABLE,
+                                NULL);
 #endif
     if (GPIO_OK != sts) {
       TWIC_GPIO_ERROR("Conf(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP) = %d\r\n", sts);
@@ -1933,8 +2020,9 @@ tz1smHalStatus_t tz1smHalGpioBleReset(const bool reset)
       goto END;
     }
 #endif
-    sts = drv->Configure(TZ1SM_HAL_GPIO_BLE_REQUEST_WAKE_UP,
-                         GPIO_DIRECTION_OUTPUT_2MA, GPIO_EVENT_DISABLE, NULL);
+    sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_REQUEST_WAKE_UP,
+                                GPIO_DIRECTION_OUTPUT_2MA,
+                                GPIO_EVENT_DISABLE, NULL);
     if (GPIO_OK != sts) {
       TWIC_GPIO_ERROR("Conf(TZ1SM_HAL_GPIO_BLE_REQUEST_WAKE_UP) = %d\r\n", sts);
       ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
@@ -1953,8 +2041,9 @@ tz1smHalStatus_t tz1smHalGpioBleReset(const bool reset)
   if (true == reset) {
     /* reset, configuration GPIO for Power Off */
 #if defined(TZ1SM_HAL_GPIO_BLE_STATUS)
-    sts = drv->Configure(TZ1SM_HAL_GPIO_BLE_STATUS,
-                         GPIO_DIRECTION_INPUT_HI_Z, GPIO_EVENT_DISABLE, NULL);
+    sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_STATUS,
+                                GPIO_DIRECTION_INPUT_HI_Z,
+                                GPIO_EVENT_DISABLE, NULL);
     if (GPIO_OK != sts) {
       TWIC_GPIO_ERROR("Conf(TZ1SM_HAL_GPIO_BLE_STATUS) = %d\r\n", sts);
       ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
@@ -1962,16 +2051,18 @@ tz1smHalStatus_t tz1smHalGpioBleReset(const bool reset)
     }
 #endif    
 #if defined(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP)
-    sts = drv->Configure(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP,
-                         GPIO_DIRECTION_INPUT_HI_Z, GPIO_EVENT_DISABLE, NULL); 
+    sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP,
+                                GPIO_DIRECTION_INPUT_HI_Z,
+                                GPIO_EVENT_DISABLE, NULL); 
     if (GPIO_OK != sts) {
       TWIC_GPIO_ERROR("Conf(TZ1SM_HAL_GPIO_BLE_HOST_WAKE_UP) = %d\r\n", sts);
       ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
       goto END;
     }
 #endif    
-    sts = drv->Configure(TZ1SM_HAL_GPIO_BLE_REQUEST_WAKE_UP,
-                         GPIO_DIRECTION_INPUT_HI_Z, GPIO_EVENT_DISABLE, NULL);
+    sts = tz1smHalGpioConfigure(TZ1SM_HAL_GPIO_BLE_REQUEST_WAKE_UP,
+                                GPIO_DIRECTION_INPUT_HI_Z,
+                                GPIO_EVENT_DISABLE, NULL);
     if (GPIO_OK != sts) {
       TWIC_GPIO_ERROR("Conf(TZ1SM_HAL_GPIO_BLE_REQUEST_WAKE_UP) = %d\r\n", sts);
       ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
@@ -2039,9 +2130,8 @@ uint8_t tz1smHalGpioButtonInit(void (handler)(uint32_t pin))
 {
   GPIO_STATUS ret;
   
-  ret = Driver_GPIO.Configure(
-    TWIC_BUTTON_GPIO_NO, GPIO_DIRECTION_INPUT_HI_Z,
-    GPIO_EVENT_EDGE_NEG, handler);
+  ret = tz1smHalGpioConfigure(TWIC_BUTTON_GPIO_NO, GPIO_DIRECTION_INPUT_HI_Z,
+                              GPIO_EVENT_EDGE_NEG, handler);
 
   if (ret != GPIO_OK)
     return 1;
@@ -2053,8 +2143,8 @@ uint8_t tz1smHalGpioButtonFinalize(void)
 {
   GPIO_STATUS ret;
   
-  ret = Driver_GPIO.Configure(
-    TWIC_BUTTON_GPIO_NO, GPIO_DIRECTION_INPUT_HI_Z, GPIO_EVENT_DISABLE, NULL);
+  ret = tz1smHalGpioConfigure(TWIC_BUTTON_GPIO_NO, GPIO_DIRECTION_INPUT_HI_Z,
+                              GPIO_EVENT_DISABLE, NULL);
   if (ret != GPIO_OK) return 1;
 
   return 0;
@@ -2062,37 +2152,36 @@ uint8_t tz1smHalGpioButtonFinalize(void)
 
 uint8_t tz1smHalGpioLedInit(void)
 {
-  GPIO_STATUS sts = GPIO_OK;
+  GPIO_STATUS sts;
 
   /* LED Pin Configuration */
-
 #if defined(TWIC_LED_GPIO_LED1)
-  sts = Driver_GPIO.Configure(
-    TWIC_LED_GPIO_LED1, GPIO_DIRECTION_OUTPUT_2MA, GPIO_EVENT_DISABLE, NULL);
+  sts = tz1smHalGpioConfigure(TWIC_LED_GPIO_LED1, GPIO_DIRECTION_OUTPUT_2MA,
+                              GPIO_EVENT_DISABLE, NULL);
   if (GPIO_OK != sts) return TWIC_LED_GPIO_LED1 | 0x80;
 #endif
 #if defined(TWIC_LED_GPIO_LED2)
-  sts = Driver_GPIO.Configure(
-    TWIC_LED_GPIO_LED2, GPIO_DIRECTION_OUTPUT_2MA, GPIO_EVENT_DISABLE, NULL);
+  sts = tz1smHalGpioConfigure(TWIC_LED_GPIO_LED2, GPIO_DIRECTION_OUTPUT_2MA,
+                              GPIO_EVENT_DISABLE, NULL);
   if (GPIO_OK != sts) return TWIC_LED_GPIO_LED2 | 0x80;
 #endif
 #if defined(TWIC_LED_GPIO_LED3)
-  sts = Driver_GPIO.Configure(
-    TWIC_LED_GPIO_LED3, GPIO_DIRECTION_OUTPUT_2MA, GPIO_EVENT_DISABLE, NULL);
+  sts = tz1smHalGpioConfigure(TWIC_LED_GPIO_LED3, GPIO_DIRECTION_OUTPUT_2MA,
+                              GPIO_EVENT_DISABLE, NULL);
   if (GPIO_OK != sts) return TWIC_LED_GPIO_LED3 | 0x80;
 #endif
 #if defined(TWIC_LED_GPIO_LED4)
-  sts = Driver_GPIO.Configure(
-    TWIC_LED_GPIO_LED4, GPIO_DIRECTION_OUTPUT_2MA, GPIO_EVENT_DISABLE, NULL);
+  sts = tz1smHalGpioConfigure(TWIC_LED_GPIO_LED4, GPIO_DIRECTION_OUTPUT_2MA,
+                              GPIO_EVENT_DISABLE, NULL);
   if (GPIO_OK != sts) return TWIC_LED_GPIO_LED4 | 0x80;
 #endif
 #if defined(TWIC_LED_GPIO_LED5)
-  sts = Driver_GPIO.Configure(
-    TWIC_LED_GPIO_LED5, GPIO_DIRECTION_OUTPUT_2MA, GPIO_EVENT_DISABLE, NULL);
+  sts = tz1smHalGpioConfigure(TWIC_LED_GPIO_LED5, GPIO_DIRECTION_OUTPUT_2MA,
+                              GPIO_EVENT_DISABLE, NULL);
   if (GPIO_OK != sts) return TWIC_LED_GPIO_LED5 | 0x80;
 #endif
 
-  return 0 & sts;
+  return 0;
 }
 
 uint8_t tz1smHalGpioLedFinalize(void)
@@ -2165,11 +2254,19 @@ bool tz1smHalGpioBleLowpowerStatus(void) { return false; }
 
 #define TWIC_UART_BLE_DRIVER_CH Driver_UART2
 #define TWIC_UART_BLE_HW_FIFO_SIZE 16
+#if defined(TWIC_BLE_HWIP_V41)
+#define TWIC_UART_BLE_TX_BUFFER_SIZE (196*2)
+#else
 #define TWIC_UART_BLE_TX_BUFFER_SIZE (136*2)
+#endif
 #if defined(TWIC_CONFIG_ENABLE_SCAN)
 #define TWIC_UART_BLE_RX_BUFFER_SIZE (1064*3)
 #else
+#if defined(TWIC_BLE_HWIP_V41)
+#define TWIC_UART_BLE_RX_BUFFER_SIZE (196*TWIC_CONFIG_RX_BUFFER_SIZE)
+#else
 #define TWIC_UART_BLE_RX_BUFFER_SIZE (136*TWIC_CONFIG_RX_BUFFER_SIZE)
+#endif
 #endif
 #define TWIC_UART_BLE_TX_CTS_CHECK_COUNT (0x1000) /* T.B.D */
 
@@ -2188,20 +2285,20 @@ bool tz1smHalGpioBleLowpowerStatus(void) { return false; }
 static void uart_ble_handler(ARM_UART_EVENT e);
 
 /* rx buffer */
-static uint8_t uart_ble_rx_buffer[TWIC_UART_BLE_RX_BUFFER_SIZE];
-static uint16_t uart_ble_rx_rp; /* count up by application */
-static uint16_t uart_ble_rx_wp; /* count up by HW FIFO */
+static uint8_t twic_ble_ua_rxb[TWIC_UART_BLE_RX_BUFFER_SIZE];
+static uint16_t twic_ble_ua_rxrp; /* count up by application */
+static uint16_t twic_ble_ua_rxwp; /* count up by HW FIFO */
 
 /* tx buffer */
-static uint8_t uart_ble_tx_buffer[TWIC_UART_BLE_TX_BUFFER_SIZE];
-static uint16_t uart_ble_tx_rp; /* count up by HW FIFO */
-static uint16_t uart_ble_tx_wp; /* count up by application */
+static uint8_t twic_ble_ua_txb[TWIC_UART_BLE_TX_BUFFER_SIZE];
+static uint16_t twic_ble_ua_txrp; /* count up by HW FIFO */
+static uint16_t twic_ble_ua_txwp; /* count up by application */
 
 /* UART Setting */
-static const uint8_t uart_ble_data_bits = 8;
-static const ARM_UART_PARITY uart_ble_parity = ARM_UART_PARITY_NONE;
-static const ARM_UART_STOP_BITS uart_ble_stop_bits = ARM_UART_STOP_BITS_1;
-static ARM_UART_FLOW_CONTROL uart_ble_fc;
+#define TWIC_BLE_UA_BITS (8)
+#define TWIC_BLE_UA_PARITY (ARM_UART_PARITY_NONE)
+#define TWIC_BLE_UA_STOP (ARM_UART_STOP_BITS_1)
+static ARM_UART_FLOW_CONTROL twic_ble_ua_fc;
 
 /* In performing hardware control, it surely uses CMSIS UART API. In
  * using GPIO, it lets tz1smHalGpio surely mounted in this file pass,
@@ -2216,8 +2313,7 @@ traceLabel xTxTraceUserEvent;
 /*
  * @brief
  * 1. Initialize UART Driver
- * 2. Configure UART Driver(115200bps, 8bit, no parity,
- *                          stop bit 1, flow contorol none)
+ * 2. Configure UART Driver
  * 3. Set Tx Threshold.
  * 4. Set Rx Threshold.
  * 5. Power Mode is FULL.
@@ -2228,8 +2324,8 @@ void tz1smHalUartInit(uint32_t br, bool fc)
   ARM_DRIVER_UART *drv = &TWIC_UART_BLE_DRIVER_CH;
   TZ1SM_HAL_INTR_STATUS_DEF;
   
-  if (true == fc) uart_ble_fc = ARM_UART_FLOW_CONTROL_RTS_CTS;
-  else uart_ble_fc = ARM_UART_FLOW_CONTROL_NONE;
+  if (true == fc) twic_ble_ua_fc = ARM_UART_FLOW_CONTROL_RTS_CTS;
+  else twic_ble_ua_fc = ARM_UART_FLOW_CONTROL_NONE;
   
   TZ1SM_HAL_IRQ_DISABLE_SAVE();
 
@@ -2245,9 +2341,18 @@ void tz1smHalUartInit(uint32_t br, bool fc)
   if (ARM_UART_OK != sts) {
     TWIC_UART_ERROR("Initialize()=%d\r\n", sts);
   }
-  
-  sts = drv->Configure(
-    br, uart_ble_data_bits, uart_ble_parity, uart_ble_stop_bits, uart_ble_fc);
+#if 0  
+  /* TZ1x SIOSC4M (NO TCO (Temperature Compensated Oscillator)) WORKAROUND >>.
+     SIOSC4M provides a compact oscillator having PM independence but less
+     satisfactory frequency temperature characteristics.
+     ATTENTION: This settings must be removed when the UA CLOCK is not
+     provided from the SIOSC4M.
+  */
+  if (115200 == br) br = 115600;
+  /* << TZ1x SIOSC4M (NO TCO (Temperature Compensated Oscillator)) WORKAROUND */
+#endif  
+  sts = drv->Configure(br, TWIC_BLE_UA_BITS, TWIC_BLE_UA_PARITY,
+                       TWIC_BLE_UA_STOP, twic_ble_ua_fc);
   if (ARM_UART_OK != sts) TWIC_UART_ERROR("TZBT 1 Configure()=%d\r\n", sts);
   
   sts = drv->SetTxThreshold(14);
@@ -2260,11 +2365,11 @@ void tz1smHalUartInit(uint32_t br, bool fc)
   if (ARM_UART_OK != sts) TWIC_UART_ERROR("PowerControl()=%d\r\n", sts);
   
   /* initialize internel variable */
-  uart_ble_rx_rp = 0;
-  uart_ble_rx_wp = 0;
+  twic_ble_ua_rxrp = 0;
+  twic_ble_ua_rxwp = 0;
   
-  uart_ble_tx_rp = 0;
-  uart_ble_tx_wp = 0;
+  twic_ble_ua_txrp = 0;
+  twic_ble_ua_txwp = 0;
   
   TZ1SM_HAL_IRQ_ENABLE_RESTORE();
 
@@ -2289,12 +2394,23 @@ tz1smHalStatus_t tz1smHalUartControl(uint32_t br, bool fc)
   ARM_UART_STATUS sts;
   TZ1SM_HAL_INTR_STATUS_DEF;
 
-  if (true == fc) uart_ble_fc = ARM_UART_FLOW_CONTROL_RTS_CTS;
-  else uart_ble_fc = ARM_UART_FLOW_CONTROL_NONE;
+  if (true == fc) twic_ble_ua_fc = ARM_UART_FLOW_CONTROL_RTS_CTS;
+  else twic_ble_ua_fc = ARM_UART_FLOW_CONTROL_NONE;
   TZ1SM_HAL_IRQ_DISABLE_SAVE();
   drv->PowerControl(ARM_POWER_LOW);
-  sts = drv->Configure(br, uart_ble_data_bits, uart_ble_parity,
-                       uart_ble_stop_bits, uart_ble_fc);
+#if 0
+  /* TZ1x SIOSC4M (NO TCO (Temperature Compensated Oscillator)) WORKAROUND >>.
+     SIOSC4M provides a compact oscillator having PM independence but less
+     satisfactory frequency temperature characteristics.
+
+     ATTENTION: This settings must be removed when the UA CLOCK is not
+     provided from the SIOSC4M.
+  */
+  if (115200 == br) br = 115600;
+  /* << TZ1x SIOSC4M (NO TCO (Temperature Compensated Oscillator)) WORKAROUND */
+#endif  
+  sts = drv->Configure(br, TWIC_BLE_UA_BITS, TWIC_BLE_UA_PARITY,
+                       TWIC_BLE_UA_STOP, twic_ble_ua_fc);
   drv->PowerControl(ARM_POWER_FULL);
   if (ARM_UART_OK != sts) {
     TWIC_UART_ERROR("TZBT 2 Configure()=%d\r\n", sts);
@@ -2345,8 +2461,8 @@ void tz1smHalUartTxBufFlush(void)
   /* clear tx buffer */
   sts = drv->FlushTxBuffer();
   if (ARM_UART_OK != sts) TWIC_UART_ERROR("FlushTxBuffer()=%d\r\n", sts);
-  uart_ble_tx_rp = 0;
-  uart_ble_tx_wp = 0;
+  twic_ble_ua_txrp = 0;
+  twic_ble_ua_txwp = 0;
   
   TZ1SM_HAL_IRQ_ENABLE_RESTORE();
   
@@ -2368,8 +2484,8 @@ void tz1smHalUartRxBufFlush(void)
   /* clear rx buffer */
   sts = drv->FlushRxBuffer();
   if (ARM_UART_OK != sts) TWIC_UART_ERROR("FlushRxBuffer()=%d\r\n", sts);
-  uart_ble_rx_rp = 0;
-  uart_ble_rx_wp = 0;
+  twic_ble_ua_rxrp = 0;
+  twic_ble_ua_rxwp = 0;
   
   TZ1SM_HAL_IRQ_ENABLE_RESTORE();
 
@@ -2419,41 +2535,42 @@ tz1smHalUartPostData(const uint8_t * const data, const uint16_t length)
 
   TZ1SM_HAL_IRQ_DISABLE_SAVE();
   
-  if (uart_ble_tx_rp != uart_ble_tx_wp) {
+  if (twic_ble_ua_txrp != twic_ble_ua_txwp) {
     /* send from tx buffer at first.*/
-    if (uart_ble_tx_wp < uart_ble_tx_rp) {
-      count = drv->WriteData(&uart_ble_tx_buffer[uart_ble_tx_rp],
-                             (TWIC_UART_BLE_TX_BUFFER_SIZE - uart_ble_tx_rp));
+    if (twic_ble_ua_txwp < twic_ble_ua_txrp) {
+      count = drv->WriteData(&twic_ble_ua_txb[twic_ble_ua_txrp],
+                             (TWIC_UART_BLE_TX_BUFFER_SIZE - twic_ble_ua_txrp));
       if (0 > count) {
-        ret_sts =TZ1SM_HAL_STATUS_ERROR_DRIVER;
+        ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
         goto END;
       }
       else {
-        uart_ble_tx_rp += count;
+        twic_ble_ua_txrp += count;
         total += count;
       }
-      if (TWIC_UART_BLE_TX_BUFFER_SIZE == uart_ble_tx_rp) uart_ble_tx_rp = 0;
+      if (TWIC_UART_BLE_TX_BUFFER_SIZE == twic_ble_ua_txrp)
+        twic_ble_ua_txrp = 0;
     }
     
-    if (uart_ble_tx_wp > uart_ble_tx_rp &&
+    if (twic_ble_ua_txwp > twic_ble_ua_txrp &&
         TWIC_UART_BLE_HW_FIFO_SIZE > total) {
-      count = drv->WriteData(&uart_ble_tx_buffer[uart_ble_tx_rp],
-                             (uart_ble_tx_wp - uart_ble_tx_rp));
+      count = drv->WriteData(&twic_ble_ua_txb[twic_ble_ua_txrp],
+                             (twic_ble_ua_txwp - twic_ble_ua_txrp));
       if (0 > count) {
-        ret_sts =TZ1SM_HAL_STATUS_ERROR_DRIVER;
+        ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
         goto END;
       } else {
-        uart_ble_tx_rp += count;
+        twic_ble_ua_txrp += count;
         total += count;
       }
     }
   }
 
   /* check buffer size */
-  if (uart_ble_tx_wp >= uart_ble_tx_rp) {
-    rest_size = (TWIC_UART_BLE_TX_BUFFER_SIZE - uart_ble_tx_wp) +
-      uart_ble_tx_rp -1;
-  } else rest_size = uart_ble_tx_rp - uart_ble_tx_wp -1;
+  if (twic_ble_ua_txwp >= twic_ble_ua_txrp) {
+    rest_size = (TWIC_UART_BLE_TX_BUFFER_SIZE - twic_ble_ua_txwp) +
+      twic_ble_ua_txrp - 1;
+  } else rest_size = twic_ble_ua_txrp - twic_ble_ua_txwp - 1;
   
   if (rest_size < length) {
     ret_sts = TZ1SM_HAL_STATUS_ERROR_RESOURCE;
@@ -2462,10 +2579,11 @@ tz1smHalUartPostData(const uint8_t * const data, const uint16_t length)
   
   /* send data buffer at second */
   tmp = 0;
-  if (uart_ble_tx_rp == uart_ble_tx_wp && TWIC_UART_BLE_HW_FIFO_SIZE > total) {
+  if (twic_ble_ua_txrp == twic_ble_ua_txwp &&
+      TWIC_UART_BLE_HW_FIFO_SIZE > total) {
     count = drv->WriteData(&data[0], length);
     if (0 > count) {
-      ret_sts =TZ1SM_HAL_STATUS_ERROR_DRIVER;
+      ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
       goto END;
     } else {
       tmp += count;
@@ -2475,14 +2593,15 @@ tz1smHalUartPostData(const uint8_t * const data, const uint16_t length)
   
   if (tmp != length) {
     /* copy to tx buffer */
-    if (uart_ble_tx_wp >= uart_ble_tx_rp) {
-      while (tmp < length && TWIC_UART_BLE_TX_BUFFER_SIZE > uart_ble_tx_wp) {
-        uart_ble_tx_buffer[uart_ble_tx_wp++] = data[tmp++];
+    if (twic_ble_ua_txwp >= twic_ble_ua_txrp) {
+      while (tmp < length && TWIC_UART_BLE_TX_BUFFER_SIZE > twic_ble_ua_txwp) {
+        twic_ble_ua_txb[twic_ble_ua_txwp++] = data[tmp++];
       }
-      if (TWIC_UART_BLE_TX_BUFFER_SIZE == uart_ble_tx_wp) uart_ble_tx_wp = 0;
+      if (TWIC_UART_BLE_TX_BUFFER_SIZE == twic_ble_ua_txwp)
+        twic_ble_ua_txwp = 0;
     }
     
-    while (tmp < length) uart_ble_tx_buffer[uart_ble_tx_wp++] = data[tmp++];
+    while (tmp < length) twic_ble_ua_txb[twic_ble_ua_txwp++] = data[tmp++];
   }
   
 END:
@@ -2526,14 +2645,14 @@ tz1smHalUartSendData(const uint8_t * const data, const uint16_t length)
   
   TZ1SM_HAL_IRQ_DISABLE_SAVE();
   
-  if (uart_ble_tx_rp != uart_ble_tx_wp) {
+  if (twic_ble_ua_txrp != twic_ble_ua_txwp) {
     /* send from tx buffer at first.*/
-    if (uart_ble_tx_wp < uart_ble_tx_rp) {
-      while (TWIC_UART_BLE_TX_BUFFER_SIZE > uart_ble_tx_rp) {
-        count = drv->WriteData(&uart_ble_tx_buffer[uart_ble_tx_rp],
-                               TWIC_UART_BLE_TX_BUFFER_SIZE - uart_ble_tx_rp);
+    if (twic_ble_ua_txwp < twic_ble_ua_txrp) {
+      while (TWIC_UART_BLE_TX_BUFFER_SIZE > twic_ble_ua_txrp) {
+        count = drv->WriteData(&twic_ble_ua_txb[twic_ble_ua_txrp],
+                               TWIC_UART_BLE_TX_BUFFER_SIZE - twic_ble_ua_txrp);
         if (0 == count) {
-          if (uart_ble_fc == ARM_UART_FLOW_CONTROL_RTS_CTS) {
+          if (ARM_UART_FLOW_CONTROL_RTS_CTS == twic_ble_ua_fc) {
             /* check CTS value */
             modem_status = drv->GetModemStatus();
             if (1 == modem_status.cts) {
@@ -2548,18 +2667,18 @@ tz1smHalUartSendData(const uint8_t * const data, const uint16_t length)
           ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
           goto END;
         } else {
-          uart_ble_tx_rp += count;
+          twic_ble_ua_txrp += count;
           cts_count = 0;
         }
       }
-      uart_ble_tx_rp = 0;
+      twic_ble_ua_txrp = 0;
     }
     
-    while (uart_ble_tx_rp < uart_ble_tx_wp) {
-      count = drv->WriteData(&uart_ble_tx_buffer[uart_ble_tx_rp],
-                             (uart_ble_tx_wp - uart_ble_tx_rp));
+    while (twic_ble_ua_txrp < twic_ble_ua_txwp) {
+      count = drv->WriteData(&twic_ble_ua_txb[twic_ble_ua_txrp],
+                             (twic_ble_ua_txwp - twic_ble_ua_txrp));
       if (0 == count) {
-        if (ARM_UART_FLOW_CONTROL_RTS_CTS == uart_ble_fc) {
+        if (ARM_UART_FLOW_CONTROL_RTS_CTS == twic_ble_ua_fc) {
           /* check CTS value */
           modem_status = drv->GetModemStatus();
           if (1 == modem_status.cts) {
@@ -2574,7 +2693,7 @@ tz1smHalUartSendData(const uint8_t * const data, const uint16_t length)
         ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
         goto END;
       } else {
-        uart_ble_tx_rp += count;
+        twic_ble_ua_txrp += count;
         cts_count = 0;
       }
     }
@@ -2585,7 +2704,7 @@ tz1smHalUartSendData(const uint8_t * const data, const uint16_t length)
   while (tmp < length) {
     count = drv->WriteData(&data[tmp], (length - tmp));
     if (0 == count) {
-      if (ARM_UART_FLOW_CONTROL_RTS_CTS == uart_ble_fc) {
+      if (ARM_UART_FLOW_CONTROL_RTS_CTS == twic_ble_ua_fc) {
         /* check CTS value */
         modem_status = drv->GetModemStatus();
         if (1 == modem_status.cts) {
@@ -2607,7 +2726,7 @@ tz1smHalUartSendData(const uint8_t * const data, const uint16_t length)
   
   /* check finish to send */
   while (!(drv->TxDone())) {
-    if (ARM_UART_FLOW_CONTROL_RTS_CTS == uart_ble_fc) {
+    if (ARM_UART_FLOW_CONTROL_RTS_CTS == twic_ble_ua_fc) {
       /* check CTS value */
       modem_status = drv->GetModemStatus();
       if (1 == modem_status.cts) {
@@ -2652,11 +2771,11 @@ tz1smHalUartPeekData(uint8_t * const data, uint16_t * const receive_length)
   if (0 == ipsr) TZ1SM_HAL_IRQ_DISABLE_SAVE();
 
   /* receive from HW RX FIFO at first.*/
-  if (uart_ble_rx_rp <= uart_ble_rx_wp) {
-    len = TWIC_UART_BLE_RX_BUFFER_SIZE - uart_ble_rx_wp;
-    if (0 == uart_ble_rx_rp) len -= 1;
-    count = drv->ReadData(&uart_ble_rx_buffer[uart_ble_rx_wp], len);
-    if (0 == count) ;
+  if (twic_ble_ua_rxrp <= twic_ble_ua_rxwp) {
+    len = TWIC_UART_BLE_RX_BUFFER_SIZE - twic_ble_ua_rxwp;
+    if (0 == twic_ble_ua_rxrp) len -= 1;
+    count = drv->ReadData(&twic_ble_ua_rxb[twic_ble_ua_rxwp], len);
+    if (0 == count);
     else if (0 > count) {
       ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
       goto END;
@@ -2665,22 +2784,23 @@ tz1smHalUartPeekData(uint8_t * const data, uint16_t * const receive_length)
       {
         int __i;
         twicUartLog("%s:%d:",__FUNCTION__,__LINE__);
-        twicUartLog("rx_wp=%d,rx_rp=%d:",uart_ble_rx_wp,uart_ble_rx_rp);
+        twicUartLog("rx_wp=%d,rx_rp=%d:",twic_ble_ua_rxwp,twic_ble_ua_rxrp);
         for (__i = 0 ; __i < count ; __i++) {
-          twicUartLog("%02x ",uart_ble_rx_buffer[uart_ble_rx_wp + __i]);
+          twicUartLog("%02x ",twic_ble_ua_rxb[twic_ble_ua_rxwp + __i]);
         }
         twicUartLog("\r\n");
       }
 #endif
-      uart_ble_rx_wp += count;
+      twic_ble_ua_rxwp += count;
       total += count;
     }
-    if (TWIC_UART_BLE_RX_BUFFER_SIZE == uart_ble_rx_wp) uart_ble_rx_wp = 0;
+    if (TWIC_UART_BLE_RX_BUFFER_SIZE == twic_ble_ua_rxwp) twic_ble_ua_rxwp = 0;
   }
   
-  if (uart_ble_rx_rp > uart_ble_rx_wp && TWIC_UART_BLE_HW_FIFO_SIZE > total) {
-    len = uart_ble_rx_rp - uart_ble_rx_wp - 1;
-    count = drv->ReadData(&uart_ble_rx_buffer[uart_ble_rx_wp], len);
+  if (twic_ble_ua_rxrp > twic_ble_ua_rxwp &&
+      TWIC_UART_BLE_HW_FIFO_SIZE > total) {
+    len = twic_ble_ua_rxrp - twic_ble_ua_rxwp - 1;
+    count = drv->ReadData(&twic_ble_ua_rxb[twic_ble_ua_rxwp], len);
     if (0 > count) {
       ret_sts = TZ1SM_HAL_STATUS_ERROR_DRIVER;
       goto END;
@@ -2689,31 +2809,32 @@ tz1smHalUartPeekData(uint8_t * const data, uint16_t * const receive_length)
       {
         int __i;
         twicUartLog("%s:%d:",__FUNCTION__,__LINE__);
-        twicUartLog("rx_wp=%d,rx_rp=%d:",uart_ble_rx_wp,uart_ble_rx_rp);
+        twicUartLog("rx_wp=%d,rx_rp=%d:",twic_ble_ua_rxwp,twic_ble_ua_rxrp);
         for (__i = 0 ; __i < count ; __i++) {
-          twicUartLog("%02x ",uart_ble_rx_buffer[uart_ble_rx_wp + __i]);
+          twicUartLog("%02x ",twic_ble_ua_rxb[twic_ble_ua_rxwp + __i]);
         }
         twicUartLog("\r\n");
       }
 #endif
-      uart_ble_rx_wp += count;
+      twic_ble_ua_rxwp += count;
       total += count;
     }
   }
   
-  if (uart_ble_rx_wp != uart_ble_rx_rp) {
-    *data = uart_ble_rx_buffer[uart_ble_rx_rp++];
-    if (TWIC_UART_BLE_RX_BUFFER_SIZE == uart_ble_rx_rp) uart_ble_rx_rp = 0;
-    if (uart_ble_rx_wp >= uart_ble_rx_rp)
-      len = uart_ble_rx_wp - uart_ble_rx_rp;
+  if (twic_ble_ua_rxwp != twic_ble_ua_rxrp) {
+    *data = twic_ble_ua_rxb[twic_ble_ua_rxrp++];
+    if (TWIC_UART_BLE_RX_BUFFER_SIZE == twic_ble_ua_rxrp) twic_ble_ua_rxrp = 0;
+    if (twic_ble_ua_rxwp >= twic_ble_ua_rxrp)
+      len = twic_ble_ua_rxwp - twic_ble_ua_rxrp;
     else
-      len = (TWIC_UART_BLE_RX_BUFFER_SIZE - uart_ble_rx_rp) + uart_ble_rx_wp;
+      len = (TWIC_UART_BLE_RX_BUFFER_SIZE - twic_ble_ua_rxrp) +
+        twic_ble_ua_rxwp;
     *receive_length = len;
     ret_sts = TZ1SM_HAL_STATUS_EVENT_MESSAGE;
 #if defined(TWIC_DEBUG_LOG_UART)
     {
       twicUartLog("%s:%d:",__FUNCTION__,__LINE__);
-      twicUartLog("rx_wp=%d,rx_rp=%d:",uart_ble_rx_wp,uart_ble_rx_rp);
+      twicUartLog("rx_wp=%d,rx_rp=%d:",twic_ble_ua_rxwp,twic_ble_ua_rxrp);
       twicUartLog("d=%02x\r\n",*data);
     }
 #endif
@@ -2749,13 +2870,13 @@ void tz1smHalUartGetData(void)
   if (0 == ipsr) TZ1SM_HAL_IRQ_DISABLE_SAVE();
   
   /* receive from HW RX FIFO at first.*/
-  while (uart_ble_rx_rp <= uart_ble_rx_wp) {
-    if (0 == uart_ble_rx_rp) {
-      count = drv->ReadData(&uart_ble_rx_buffer[uart_ble_rx_wp],
-                            TWIC_UART_BLE_RX_BUFFER_SIZE - uart_ble_rx_wp -1);
+  while (twic_ble_ua_rxrp <= twic_ble_ua_rxwp) {
+    if (0 == twic_ble_ua_rxrp) {
+      count = drv->ReadData(&twic_ble_ua_rxb[twic_ble_ua_rxwp],
+                            TWIC_UART_BLE_RX_BUFFER_SIZE - twic_ble_ua_rxwp -1);
     } else {
-      count = drv->ReadData(&uart_ble_rx_buffer[uart_ble_rx_wp],
-                            TWIC_UART_BLE_RX_BUFFER_SIZE - uart_ble_rx_wp);
+      count = drv->ReadData(&twic_ble_ua_rxb[twic_ble_ua_rxwp],
+                            TWIC_UART_BLE_RX_BUFFER_SIZE - twic_ble_ua_rxwp);
     }
     if (0 == count) break;
     else if (0 > count) goto END;
@@ -2764,22 +2885,22 @@ void tz1smHalUartGetData(void)
       {
         int __i;
         twicUartLog("%s:%d:",__FUNCTION__,__LINE__);
-        twicUartLog("rx_wp=%d,rx_rp=%d:",uart_ble_rx_wp,uart_ble_rx_rp);
+        twicUartLog("rx_wp=%d,rx_rp=%d:",twic_ble_ua_rxwp,twic_ble_ua_rxrp);
         for (__i = 0 ; __i < count ; __i++) {
-          twicUartLog("%02x ",uart_ble_rx_buffer[uart_ble_rx_wp + __i]);
+          twicUartLog("%02x ",twic_ble_ua_rxb[twic_ble_ua_rxwp + __i]);
         }
         twicUartLog("\r\n");
       }
 #endif
-      uart_ble_rx_wp += count;
+      twic_ble_ua_rxwp += count;
       total += count;
     }
-    if (TWIC_UART_BLE_RX_BUFFER_SIZE == uart_ble_rx_wp) uart_ble_rx_wp = 0;
+    if (TWIC_UART_BLE_RX_BUFFER_SIZE == twic_ble_ua_rxwp) twic_ble_ua_rxwp = 0;
   }
   
-  while (uart_ble_rx_rp > (uart_ble_rx_wp + 1)) {
-    count = drv->ReadData(&uart_ble_rx_buffer[uart_ble_rx_wp],
-                          (uart_ble_rx_rp - uart_ble_rx_wp - 1));
+  while (twic_ble_ua_rxrp > (twic_ble_ua_rxwp + 1)) {
+    count = drv->ReadData(&twic_ble_ua_rxb[twic_ble_ua_rxwp],
+                          (twic_ble_ua_rxrp - twic_ble_ua_rxwp - 1));
     if (0 == count) break;
     else if (0 > count) goto END;
     else {
@@ -2787,25 +2908,25 @@ void tz1smHalUartGetData(void)
       {
         int __i;
         twicUartLog("%s:%d:",__FUNCTION__,__LINE__);
-        twicUartLog("rx_wp=%d,rx_rp=%d:",uart_ble_rx_wp,uart_ble_rx_rp);
+        twicUartLog("rx_wp=%d,rx_rp=%d:",twic_ble_ua_rxwp,twic_ble_ua_rxrp);
         for (__i = 0 ; __i < count ; __i++) {
-          twicUartLog("%02x ",uart_ble_rx_buffer[uart_ble_rx_wp + __i]);
+          twicUartLog("%02x ",twic_ble_ua_rxb[twic_ble_ua_rxwp + __i]);
         }
         twicUartLog("\r\n");
       }
 #endif
-      uart_ble_rx_wp += count;
+      twic_ble_ua_rxwp += count;
       total += count;
     }
   }
   
   /* check sw fifo size */
   if (0 == total) {
-    if (uart_ble_rx_wp >= uart_ble_rx_rp)
-      receive_size = uart_ble_rx_wp - uart_ble_rx_rp;
+    if (twic_ble_ua_rxwp >= twic_ble_ua_rxrp)
+      receive_size = twic_ble_ua_rxwp - twic_ble_ua_rxrp;
     else
-      receive_size = (TWIC_UART_BLE_RX_BUFFER_SIZE - uart_ble_rx_rp) +
-        uart_ble_rx_wp;
+      receive_size = (TWIC_UART_BLE_RX_BUFFER_SIZE - twic_ble_ua_rxrp) +
+        twic_ble_ua_rxwp;
     if ((TWIC_UART_BLE_RX_BUFFER_SIZE -1) == receive_size) {
       /* sw fifo is full. clear rx buffer.
          sts = drv->FlushRxBuffer();
@@ -2830,22 +2951,23 @@ static void uart_ble_handler_tx(void)
   int32_t count;
   uint16_t total = 0;
   
-  if (uart_ble_tx_rp != uart_ble_tx_wp) {
+  if (twic_ble_ua_txrp != twic_ble_ua_txwp) {
     /* send from tx buffer at first.*/
-    if (uart_ble_tx_wp < uart_ble_tx_rp) {
-      count = drv->WriteData(&uart_ble_tx_buffer[uart_ble_tx_rp],
-                             TWIC_UART_BLE_TX_BUFFER_SIZE - uart_ble_tx_rp);
+    if (twic_ble_ua_txwp < twic_ble_ua_txrp) {
+      count = drv->WriteData(&twic_ble_ua_txb[twic_ble_ua_txrp],
+                             TWIC_UART_BLE_TX_BUFFER_SIZE - twic_ble_ua_txrp);
       if (0 > count) goto END;
-      else { uart_ble_tx_rp += count; total += count; }
-      if (uart_ble_tx_rp == TWIC_UART_BLE_TX_BUFFER_SIZE) uart_ble_tx_rp = 0;
+      else { twic_ble_ua_txrp += count; total += count; }
+      if (twic_ble_ua_txrp == TWIC_UART_BLE_TX_BUFFER_SIZE)
+        twic_ble_ua_txrp = 0;
     }
     
-    if (uart_ble_tx_wp > uart_ble_tx_rp &&
+    if (twic_ble_ua_txwp > twic_ble_ua_txrp &&
         TWIC_UART_BLE_HW_FIFO_SIZE > total) {
-      count = drv->WriteData(&uart_ble_tx_buffer[uart_ble_tx_rp],
-                             uart_ble_tx_wp - uart_ble_tx_rp);
+      count = drv->WriteData(&twic_ble_ua_txb[twic_ble_ua_txrp],
+                             twic_ble_ua_txwp - twic_ble_ua_txrp);
       if (0 > count) goto END;
-      else { uart_ble_tx_rp += count; total += count; }
+      else { twic_ble_ua_txrp += count; total += count; }
     }
   }
   
@@ -2860,7 +2982,7 @@ static void uart_ble_handler_rx(void)
 {
   tz1smHalUartGetData();
 #if defined(TWIC_EVENT_CALLBACK)
-  if (uart_ble_rx_rp != uart_ble_rx_wp && hal_cb.intr_ble_uart_rx != NULL) {
+  if (twic_ble_ua_rxrp != twic_ble_ua_rxwp && hal_cb.intr_ble_uart_rx != NULL) {
     hal_cb.intr_ble_uart_rx();
 #if defined(TWIC_DEBUG_LOG_UART)
     twicUartLog("intr_ble_uart_rx called\r\n");
@@ -2964,7 +3086,7 @@ bool tz1smHalUartDataAvailable(void)
   ARM_DRIVER_UART *drv = &TWIC_UART_BLE_DRIVER_CH;
   
   if (0 < drv->DataAvailable()) return true;
-  if (uart_ble_rx_rp != uart_ble_rx_wp) return true;
+  if (twic_ble_ua_rxrp != twic_ble_ua_rxwp) return true;
 
   return false;
 }
@@ -2972,40 +3094,194 @@ bool tz1smHalUartDataAvailable(void)
 
 void tz1smHalSuppressHpd(const bool enable)
 {
-#if defined(TWIC_LECE_SUPPRESS_HPD)
-  /*
-    ARM_DRIVER_UART *drv = &TWIC_UART_BLE_DRIVER_CH;
-    ARM_UART_STATUS uart_sts;
-  */
-  GPIO_STATUS gpio_sts;
+#if defined(TWIC_LECE_BOOT_TZ1041_PRIMARY_SAMPLE) || defined(TWIC_LECE_SUPPRESS_HPD)
+  static tz1sm_gpio_cts_configuration_t cts_setup;
+
+#if (RTE_UA2_CTS_N_ID != 1) && (RTE_GPIO_11_ID != 2)
+#define IOMUX_UA2_CTS_N_FMODE (0)/* HW FLOW is OFF. Pin is except CTS. */
+#elif (RTE_UA2_CTS_N_ID == 1) && (RTE_GPIO_11_ID != 2)
+#define IOMUX_UA2_CTS_N_FMODE (1)/* HW FLOW is ON. Pin is except CTS. */
+#elif (RTE_UA2_CTS_N_ID != 1) && (RTE_GPIO_11_ID == 2)
+#define IOMUX_UA2_CTS_N_FMODE (3)/* HW FLOW is OFF. Pin is CTS. */
+#else
+#error Conflicted IO pin in IOMUX_UA2_CTS_N_FMODE
+#endif
+#if (RTE_GPIO_0_ID != 1)
+#define IOMUX_GPIO_0_FMODE 0
+#else
+#define IOMUX_GPIO_0_FMODE 1
+#endif
+#if (RTE_GPIO_1_ID != 1)
+#define IOMUX_GPIO_1_FMODE 0
+#else
+#define IOMUX_GPIO_1_FMODE 1
+#endif
+#if (RTE_GPIO_2_ID != 1)
+#define IOMUX_GPIO_2_FMODE 0
+#else
+#define IOMUX_GPIO_2_FMODE 1
+#endif
+#if (RTE_GPIO_3_ID != 1)
+#define IOMUX_GPIO_3_FMODE 0
+#else
+#define IOMUX_GPIO_3_FMODE 1
+#endif
+#if (RTE_GPIO_4_ID != 1)
+#define IOMUX_GPIO_4_FMODE 0
+#else
+#define IOMUX_GPIO_4_FMODE 1
+#endif
+#if (RTE_GPIO_5_ID != 1)
+#define IOMUX_GPIO_5_FMODE 0
+#else
+#define IOMUX_GPIO_5_FMODE 1
+#endif
+#if (RTE_GPIO_6_ID != 1)
+#define IOMUX_GPIO_6_FMODE 0
+#else
+#define IOMUX_GPIO_6_FMODE 1
+#endif
+#if (RTE_GPIO_7_ID != 1)
+#define IOMUX_GPIO_7_FMODE 0
+#else
+#define IOMUX_GPIO_7_FMODE 1
+#endif
+#if (RTE_GPIO_8_ID != 1) && (RTE_PWM0_ID != 1) && (RTE_TRACEDATA0_ID != 1)
+#define IOMUX_GPIO_8_FMODE 0
+#elif (RTE_GPIO_8_ID == 1) && (RTE_PWM0_ID != 1) && (RTE_TRACEDATA0_ID != 1)
+#define IOMUX_GPIO_8_FMODE 1
+#elif (RTE_GPIO_8_ID != 1) && (RTE_PWM0_ID == 1) && (RTE_TRACEDATA0_ID != 1)
+#define IOMUX_GPIO_8_FMODE 2
+#elif (RTE_GPIO_8_ID != 1) && (RTE_PWM0_ID != 1) && (RTE_TRACEDATA0_ID == 1)
+#define IOMUX_GPIO_8_FMODE 3
+#else
+#error Conflicted IO pin in IOMUX_GPIO_8_FMODE
+#endif
+#if (RTE_GPIO_9_ID != 1) && (RTE_PWM1_ID != 1) && (RTE_TRACEDATA1_ID != 1)
+#define IOMUX_GPIO_9_FMODE 0
+#elif (RTE_GPIO_9_ID == 1) && (RTE_PWM1_ID != 1) && (RTE_TRACEDATA1_ID != 1)
+#define IOMUX_GPIO_9_FMODE 1
+#elif (RTE_GPIO_9_ID != 1) && (RTE_PWM1_ID == 1) && (RTE_TRACEDATA1_ID != 1)
+#define IOMUX_GPIO_9_FMODE 2
+#elif (RTE_GPIO_9_ID != 1) && (RTE_PWM1_ID != 1) && (RTE_TRACEDATA1_ID == 1)
+#define IOMUX_GPIO_9_FMODE 3
+#else
+#error Conflicted IO pin in IOMUX_GPIO_9_FMODE
+#endif
+#if (RTE_GPIO_10_ID != 1) && (RTE_PWM2_ID != 1) && (RTE_TRACEDATA2_ID != 1)
+#define IOMUX_GPIO_10_FMODE 0
+#elif (RTE_GPIO_10_ID == 1) && (RTE_PWM2_ID != 1) && (RTE_TRACEDATA2_ID != 1)
+#define IOMUX_GPIO_10_FMODE 1
+#elif (RTE_GPIO_10_ID != 1) && (RTE_PWM2_ID == 1) && (RTE_TRACEDATA2_ID != 1)
+#define IOMUX_GPIO_10_FMODE 2
+#elif (RTE_GPIO_10_ID != 1) && (RTE_PWM2_ID != 1) && (RTE_TRACEDATA2_ID == 1)
+#define IOMUX_GPIO_10_FMODE 3
+#else
+#error Conflicted IO pin in IOMUX_GPIO_10_FMODE
+#endif
+#if (RTE_GPIO_11_ID != 1) && (RTE_PWM3_ID != 1) && (RTE_TRACEDATA3_ID != 1)
+#define IOMUX_GPIO_11_FMODE 0
+#elif (RTE_GPIO_11_ID == 1) && (RTE_PWM3_ID != 1) && (RTE_TRACEDATA3_ID != 1)
+#define IOMUX_GPIO_11_FMODE 1
+#elif (RTE_GPIO_11_ID != 1) && (RTE_PWM3_ID == 1) && (RTE_TRACEDATA3_ID != 1)
+#define IOMUX_GPIO_11_FMODE 2
+#elif (RTE_GPIO_11_ID != 1) && (RTE_PWM3_ID != 1) && (RTE_TRACEDATA3_ID == 1)
+#define IOMUX_GPIO_11_FMODE 3
+#else
+#error Conflicted IO pin in IOMUX_GPIO_11_FMODE
+#endif
+#if (RTE_GPIO_12_ID != 1) && (RTE_SPIM3_CS_N_ID != 2) && (RTE_CAPTURE0_ID != 1)
+#define IOMUX_GPIO_12_FMODE 0
+#elif (RTE_GPIO_12_ID == 1) && (RTE_SPIM3_CS_N_ID != 2) && (RTE_CAPTURE0_ID != 1)
+#define IOMUX_GPIO_12_FMODE 1
+#elif (RTE_GPIO_12_ID != 1) && (RTE_SPIM3_CS_N_ID == 2) && (RTE_CAPTURE0_ID != 1)
+#define IOMUX_GPIO_12_FMODE 2
+#elif (RTE_GPIO_12_ID != 1) && (RTE_SPIM3_CS_N_ID != 2) && (RTE_CAPTURE0_ID == 1)
+#define IOMUX_GPIO_12_FMODE 3
+#else
+#error Conflicted IO pin in IOMUX_GPIO_12_FMODE
+#endif
+#if (RTE_GPIO_13_ID != 1) && (RTE_SPIM3_CLK_ID != 2) && (RTE_CAPTURE1_ID != 1)
+#define IOMUX_GPIO_13_FMODE 0
+#elif (RTE_GPIO_13_ID == 1) && (RTE_SPIM3_CLK_ID != 2) && (RTE_CAPTURE1_ID != 1)
+#define IOMUX_GPIO_13_FMODE 1
+#elif (RTE_GPIO_13_ID != 1) && (RTE_SPIM3_CLK_ID == 2) && (RTE_CAPTURE1_ID != 1)
+#define IOMUX_GPIO_13_FMODE 2
+#elif (RTE_GPIO_13_ID != 1) && (RTE_SPIM3_CLK_ID != 2) && (RTE_CAPTURE1_ID == 1)
+#define IOMUX_GPIO_13_FMODE 3
+#else
+#error Conflicted IO pin in IOMUX_GPIO_13_FMODE
+#endif
+#if (RTE_GPIO_14_ID != 1) && (RTE_SPIM3_MOSI_ID != 2) && (RTE_UA0_RTS_N_ID != 1)
+#define IOMUX_GPIO_14_FMODE 0
+#elif (RTE_GPIO_14_ID == 1) && (RTE_SPIM3_MOSI_ID != 2) && (RTE_UA0_RTS_N_ID != 1)
+#define IOMUX_GPIO_14_FMODE 1
+#elif (RTE_GPIO_14_ID != 1) && (RTE_SPIM3_MOSI_ID == 2) && (RTE_UA0_RTS_N_ID != 1)
+#define IOMUX_GPIO_14_FMODE 2
+#elif (RTE_GPIO_14_ID != 1) && (RTE_SPIM3_MOSI_ID != 2) && (RTE_UA0_RTS_N_ID == 1)
+#define IOMUX_GPIO_14_FMODE 3
+#else
+#error Conflicted IO pin in IOMUX_GPIO_14_FMODE
+#endif
+#if (RTE_GPIO_15_ID != 1) && (RTE_SPIM3_MISO_ID != 2) && (RTE_UA0_CTS_N_ID != 1)
+#define IOMUX_GPIO_15_FMODE 0
+#elif (RTE_GPIO_15_ID == 1) && (RTE_SPIM3_MISO_ID != 2) && (RTE_UA0_CTS_N_ID != 1)
+#define IOMUX_GPIO_15_FMODE 1
+#elif (RTE_GPIO_15_ID != 1) && (RTE_SPIM3_MISO_ID == 2) && (RTE_UA0_CTS_N_ID != 1)
+#define IOMUX_GPIO_15_FMODE 2
+#elif (RTE_GPIO_15_ID != 1) && (RTE_SPIM3_MISO_ID != 2) && (RTE_UA0_CTS_N_ID == 1)
+#define IOMUX_GPIO_15_FMODE 3
+#else
+#error Conflicted IO pin in IOMUX_GPIO_15_FMODE
+#endif
+#if 1 == IOMUX_GPIO_11_FMODE
+  static bool level = false;
+#endif
   
   if (true == enable) {
-    gpio_sts = Driver_GPIO.Configure(TWIC_LECE_SUPPRESS_HPD_GPIO_NUMBER,
-                                     GPIO_DIRECTION_OUTPUT_2MA,
-                                     GPIO_EVENT_DISABLE, NULL);
-    if (GPIO_OK != gpio_sts) {
-      TWIC_GPIO_ERROR("Conf(SUPPRESS_HPD_GPIO_NUMBER) = %d\r\n", gpio_sts);
+#if 11 != TZ1SM_HAL_GPIO_BLE_CTS
+#warning "Please check for the H4 CTS GPIO number."
+#endif
+#if 1 == IOMUX_GPIO_11_FMODE
+    tz1smHalGpioRead(TZ1SM_HAL_GPIO_BLE_CTS, &level);
+#endif
+    /* Setup of "!RTE_UART2_HW_FLOW" && "OUTPUT is UART_CTS". */
+    gconf->FMODE_CFG3_b.UA2_CTS_N_FMODE = 3;
+#if 1 == IOMUX_GPIO_11_FMODE
+    /* OFF GPIO_11 not to change the current level. */
+    gconf->FMODE_CFG0 = (IOMUX_GPIO_0_FMODE) | (IOMUX_GPIO_1_FMODE << 2)
+      | (IOMUX_GPIO_2_FMODE   << 4) | (IOMUX_GPIO_3_FMODE  <<  6)
+      | (IOMUX_GPIO_4_FMODE   << 8) | (IOMUX_GPIO_5_FMODE  << 10)
+      | (IOMUX_GPIO_6_FMODE  << 12) | (IOMUX_GPIO_7_FMODE  << 14)
+      | (IOMUX_GPIO_8_FMODE  << 16) | (IOMUX_GPIO_9_FMODE  << 18)
+      | (IOMUX_GPIO_10_FMODE << 20) | (0 << 22)
+      | (IOMUX_GPIO_12_FMODE << 24) | (IOMUX_GPIO_13_FMODE << 26)
+      | (IOMUX_GPIO_14_FMODE << 28) | ((uint32_t)IOMUX_GPIO_15_FMODE << 30);
+#endif
+    cts_setup = tz1sm_gpio_cts_setup;
+    Driver_GPIO.Configure(TZ1SM_HAL_GPIO_BLE_CTS, GPIO_DIRECTION_OUTPUT_2MA,
+                          GPIO_EVENT_DISABLE, NULL);
+    tz1smHalGpioWrite(TZ1SM_HAL_GPIO_BLE_CTS, false);
+  } else { /* false == enable */
+#if 1 == IOMUX_GPIO_11_FMODE
+    gconf->FMODE_CFG0 = (IOMUX_GPIO_0_FMODE) | (IOMUX_GPIO_1_FMODE << 2)
+      | (IOMUX_GPIO_2_FMODE   << 4) | (IOMUX_GPIO_3_FMODE  <<  6)
+      | (IOMUX_GPIO_4_FMODE   << 8) | (IOMUX_GPIO_5_FMODE  << 10)
+      | (IOMUX_GPIO_6_FMODE  << 12) | (IOMUX_GPIO_7_FMODE  << 14)
+      | (IOMUX_GPIO_8_FMODE  << 16) | (IOMUX_GPIO_9_FMODE  << 18)
+      | (IOMUX_GPIO_10_FMODE << 20) | (IOMUX_GPIO_11_FMODE << 22)
+      | (IOMUX_GPIO_12_FMODE << 24) | (IOMUX_GPIO_13_FMODE << 26)
+      | (IOMUX_GPIO_14_FMODE << 28) | ((uint32_t)IOMUX_GPIO_15_FMODE << 30);
+    if (true == cts_setup.inheritance) {
+      Driver_GPIO.Configure(TZ1SM_HAL_GPIO_BLE_CTS, cts_setup.dir,
+                            cts_setup.event, cts_setup.cb_event);
+      tz1smHalGpioWrite(TZ1SM_HAL_GPIO_BLE_CTS, level);
     }
-    tz1smHalGpioWrite(TWIC_LECE_SUPPRESS_HPD_GPIO_NUMBER, false);
-    /*
-      uart_sts = drv->SetModemControl(ARM_UART_RTS_SET); Active Lo : Lo
-      if (ARM_UART_OK != uart_sts) {
-      TWIC_UART_ERROR("SetModemControl()=%d\r\n", uart_sts);
-      }
-    */
-  } else {
-    gpio_sts = Driver_GPIO.Configure(TWIC_LECE_SUPPRESS_HPD_GPIO_NUMBER,
-                                     GPIO_DIRECTION_INPUT_HI_Z,
-                                     GPIO_EVENT_DISABLE, NULL);
-    if (GPIO_OK != gpio_sts) {
-      TWIC_GPIO_ERROR("Conf(SUPPRESS_HPD_GPIO_NUMBER) = %d\r\n", gpio_sts);
-    }
-    /*
-      uart_sts = drv->SetModemControl(ARM_UART_RTS_CLEAR); Active Lo : Hi
-      if (ARM_UART_OK != uart_sts) {
-      TWIC_UART_ERROR("SetModemControl()=%d\r\n", uart_sts);
-      }
-    */
+#else
+    Driver_GPIO.Configure(TZ1SM_HAL_GPIO_BLE_CTS, GPIO_DIRECTION_INPUT_HI_Z,
+                          GPIO_EVENT_DISABLE, NULL);
+#endif
+    gconf->FMODE_CFG3_b.UA2_CTS_N_FMODE = IOMUX_UA2_CTS_N_FMODE;
   }
 #endif
 }

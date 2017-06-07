@@ -1,7 +1,7 @@
 /**
  * @file twic_util_ancs.h
- * @brief a source file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V1.0.0.FS (Free Sample - The information in this code is
+ * @brief a source file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.0.1.FS (Free Sample - The information in this code is
  * subject to change without notice and should not be construed as a
  * commitment by TOSHIBA CORPORATION SEMICONDUCTOR & STORAGE PRODUCTS
  * COMPANY.

@@ -1,7 +1,7 @@
 /**
  * @file twic_util_lemng.c
- * @brief a source file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V1.0.0.FS (Free Sample - The information in this code is
+ * @brief a source file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.0.10.FS (Free Sample - The information in this code is
  * subject to change without notice and should not be construed as a
  * commitment by TOSHIBA CORPORATION SEMICONDUCTOR & STORAGE PRODUCTS
  * COMPANY.
@@ -278,6 +278,40 @@ twicStatus_t twicUtLeConnectionUpdate(twicConnIface_t * const cif,
   if (_ar) return TWIC_STATUS_ERROR_IO;
   return TWIC_STATUS_OK;
 }
+
+#if defined(TWIC_BLE_HWIP_V41)
+twicStatus_t twicUtLeConnectionParameterRequestReply(
+  twicConnIface_t * const cif, uint16_t conn_int_min,
+  uint16_t conn_int_max, uint16_t slave_latency, uint16_t supervison_timeout)
+{
+  twicStatus_t status = TWIC_STATUS_OK;
+  uint8_t _ar;
+
+  for (;twicUtPeekInApi(cif, TWIC_LECONNECTIONPARAMETERREQUESTREPLY,
+                        &_ar) != true;) {
+    status = twicIfLeConnectionParameterRequestReply(
+      cif, conn_int_min, conn_int_max, slave_latency, supervison_timeout);
+    if (false == twicUtCheckAndDoEvent(status)) return status;
+  }
+  if (_ar) return TWIC_STATUS_ERROR_IO;
+  return TWIC_STATUS_OK;
+}
+
+twicStatus_t twicUtLeConnectionParameterRequestNegativeReply(
+  twicConnIface_t * const cif, const uint8_t reason)
+{
+  twicStatus_t status = TWIC_STATUS_OK;
+  uint8_t _ar;
+
+  for (;twicUtPeekInApi(cif, TWIC_LECONNECTIONPARAMETERREQUESTNEGATIVEREPLY,
+                        &_ar) != true;) {
+    status = twicIfLeConnectionParameterRequestNegativeReply(cif, reason);
+    if (false == twicUtCheckAndDoEvent(status)) return status;
+  }
+  if (_ar) return TWIC_STATUS_ERROR_IO;
+  return TWIC_STATUS_OK;
+}
+#endif
 
 twicStatus_t twicUtGattServerWriteCharacteristics(
   twicConnIface_t * const cif,

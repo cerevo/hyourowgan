@@ -1,12 +1,13 @@
 /**
  * @file tz1sm_config.h
- * @brief a header file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V2.0.0
+ * @brief a header file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V2.1.0
  * @note
  */
 
+
 /*
- * COPYRIGHT (C) 2014
+ * COPYRIGHT (C) 2014, 2015
  * TOSHIBA CORPORATION SEMICONDUCTOR & STORAGE PRODUCTS COMPANY
  * ALL RIGHTS RESERVED.
  *
@@ -53,40 +54,57 @@
 #undef TZ1XXX_BOARD_DEVELOPER_A
 #undef TZ1XXX_BOARD_REFERENCE_A
 #undef TZ1XXX_BOARD_REFERENCE_B
-#define TZ1XXX_BOARD_REFERENCE_X
-#undef TZ1XXX_BOARD_EXTERIOR_A
-#undef TZ1XXX_BOARD_EXTERIOR_H
+#define TZ1XXX_BOARD_REFERENCE_X  /* TYPE-X TZ1001 and 1041. */
+#undef TZ1XXX_BOARD_EXTERIOR_A   /* TYPE-X External Toshiba BLE. */
+#undef TZ1XXX_BOARD_EXTERIOR_H   /* External Toshiba BLE without Low Power. */
 
 
 /*
- * NON-OS, RTOS
+ * non-OS, RTOS
  *
+ * NOTE: If the TICKLESS IDLE porting or the 'tz1sm_hal' OS function is not
+ * used, the TWIC_RTOS__NONOS shall be chosen even if the FreeRTOS is used.
  */
 #define TWIC_RTOS__NONOS
 #undef TWIC_RTOS__CMSIS_RTOS
 #undef TWIC_RTOS__FREERTOS
-#undef TWIC_RTOS__FREERTOS_TICKLESS
+/* It does not depend for this example of TZ1EM on the time of FreeRTOS.
+ * Moreover, in this example, since TICK stops frequently, the timer of
+ * FreeRTOS is not used. For this reason, please choose NONOS. */
 
 
 /*
  * Define TWIC_BLE_HWIP_V41 if HWIP supports V4.1, otherwise disable it.
+ * NOTE: Please define TWIC_BLE_HWIP_V41 if the device is TZ1041.
+ *
+ * Define TWIC_BLE_HWIP_V41_COMPAT_V40 if you do not want to change
+ * your application using V4.0, otherwise disable it.
+ * TWiC recommends that TWIC_BLE_HWIP_V41_COMPAT_V40 is not enabled to
+ * perform BLE 4.1 functions if you are using BLE4.1.
  *
  */
-#undef TWIC_BLE_HWIP_V41
+#define TWIC_BLE_HWIP_V41
+#undef TWIC_BLE_HWIP_V41_COMPAT_V40
+/* Maximum Masters + Maximum Slaves should be <=5. */
+#define TWIC_BLE_HWIP_V41_MASTERS   (1) /* upto 4 remote Slaves */
+#define TWIC_BLE_HWIP_V41_SLAVES    (1) /* upto 2 remote Masters */
+
 
 /*
  * Define TWIC_SCAN if the LE_Scan_Enable is used otherwise
- * disable it for saving memory (-2.5kB).
+ * disable it for saving memory.
  *
  */
 #undef TWIC_CONFIG_ENABLE_SCAN
+
 
 /*
  * TWIC_CONFIG_RX_BUFFER_SIZE
  * If neither ATT Write Command or GATT Client Notification is used,
  * the size can be 3.
  */
-#define TWIC_CONFIG_RX_BUFFER_SIZE 6
+#define TWIC_CONFIG_RX_BUFFER_SIZE 3
+
 
 /*
  * Define TWIC_SM_INITIATOR if the SMP Initiator feature is used otherwise
@@ -169,6 +187,7 @@
 #undef TWIC_API_LECEMEMORYWRITE
 #undef TWIC_API_LECEMEMORYREAD
 #undef TWIC_API_LECEXOSCTRIMING
+#undef TWIC_API_LECEREADFWVER
 
 /*
  * GATT Based service utility definition.
@@ -356,7 +375,7 @@
 #elif defined(TZ1XXX_BOARD_REFERENCE_A) || defined(TZ1XXX_BOARD_REFERENCE_B)
 #define TWIC_DEBUG_UART_NUMBER (TWIC_DEBUG_UART_CH_1)
 
-#elif defined(TZ1XXX_BOARD_DEVELOPER_X) || defined(TZ1XXX_BOARD_EXTERIOR_A)
+#elif defined(TZ1XXX_BOARD_REFERENCE_X) || defined(TZ1XXX_BOARD_EXTERIOR_A)
 #define TWIC_DEBUG_UART_NUMBER (TWIC_DEBUG_UART_CH_0)
 
 #elif defined(TZ1XXX_BOARD_EXTERIOR_H)
@@ -391,7 +410,7 @@
 #define TWIC_LECE_DCDCEN
 #define TWIC_LECE_DCDCEN_GPIO_NUMBER (1)
 
-#elif defined(TZ1XXX_BOARD_DEVELOPER_X) || defined(TZ1XXX_BOARD_EXTERIOR_A)
+#elif defined(TZ1XXX_BOARD_REFERENCE_X) || defined(TZ1XXX_BOARD_EXTERIOR_A)
 
 #undef TWIC_LECE_DCDCEN
 #undef TWIC_LECE_DCDCEN_GPIO_NUMBER
@@ -446,16 +465,23 @@
  * Please check RTE_Device.h for the GPIO.
  *
  */
+
 #if defined(TZ1XXX_BOARD_EXTERIOR_A)
-
-#define TWIC_LECE_SUPPRESS_HPD /* host program download mode */
-#define TWIC_LECE_SUPPRESS_HPD_GPIO_NUMBER (26)
-
+#define TWIC_LECE_SUPPRESS_HPD
 #else
-
-#undef TWIC_LECE_SUPPRESS_HPD /* host program download mode */
-#undef TWIC_LECE_SUPPRESS_HPD_GPIO_NUMBER
-
+#undef TWIC_LECE_SUPPRESS_HPD
 #endif
+
+
+/*
+ * TWIC_LECE_BOOT_TZ1X_PRIMARY_SAMPLE.
+ *
+ * If the TZ1041 is a primary (preliminary) sample device, please define
+ * this definition.
+ * 
+ *
+ */
+
+#undef TWIC_LECE_BOOT_TZ1041_PRIMARY_SAMPLE
 
 #endif /* _TZ1SM_CONFIG_H_ */

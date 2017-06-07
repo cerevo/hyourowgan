@@ -1,5 +1,5 @@
 TARGET=hyourowgan
-DFP_VER=1.35.0
+DFP_VER=1.39.0
 
 ifeq ($(DFP_VER),)
 	DFP_PATH = $(SDK_DIR)TOSHIBA.TZ10xx_DFP

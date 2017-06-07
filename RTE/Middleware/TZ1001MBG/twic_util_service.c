@@ -1,7 +1,7 @@
 /**
  * @file twic_util_service.c
- * @brief a source file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V1.0.0.FS (Free Sample - The information in this code is
+ * @brief a source file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.0.1.FS (Free Sample - The information in this code is
  * subject to change without notice and should not be construed as a
  * commitment by TOSHIBA CORPORATION SEMICONDUCTOR & STORAGE PRODUCTS
  * COMPANY.
@@ -75,8 +75,8 @@ typedef struct appGattDb {
 } appGattDb_t;
 
 static twicStatus_t
-twicUtInitService(twicConnIface_t *cif, uint8_t *aret, uint8_t eidx,
-                  appGattDb_t *db, uint8_t num)
+twicUtInitService(twicConnIface_t *cif, uint8_t *aret,
+                  uint8_t eidx, appGattDb_t *db, uint8_t num)
 {
   twicStatus_t status;
   uint8_t _ar;
@@ -251,7 +251,17 @@ twicUtInitHRService(twicConnIface_t *cif, uint8_t *aret, uint8_t eidx)
 {
   appGattDb_t hr = { TWIC_UTIL_HR_SERVICE_SET, TWIC_UTIL_HR_SERVICE_LEN, {
       {
-        0x2A37, 0, TWIC_UUID16, 0x10, 0x703, twic_util_hr_measurement,
+        0x2A37, 0, TWIC_UUID16,
+#if !defined(ATT_MAX_DATA_RATE)
+        0x10,
+#else
+        TWIC_PROPERTY_R /* permits reads */ |
+        // TWIC_PROPERTY_WWR /* Write Without Response */ |
+        TWIC_PROPERTY_W /* permits writes */ |
+        TWIC_PROPERTY_N /* permits notifications */ |
+        TWIC_PROPERTY_I /* permits indications */,
+#endif
+        0x703, twic_util_hr_measurement,
         sizeof(twic_util_hr_measurement),
         0x2902, 0x703, twic_util_hr_mea_desc, sizeof(twic_util_hr_mea_desc)
       },
@@ -261,7 +271,16 @@ twicUtInitHRService(twicConnIface_t *cif, uint8_t *aret, uint8_t eidx)
         0, 0, NULL, 0
       },
       {
-        0x2A39, 0, TWIC_UUID16, 0x08, 0x703, twic_util_hr_control_point,
+        0x2A39, 0, TWIC_UUID16,
+#if !defined(ATT_MAX_DATA_RATE)
+        0x08,
+#else
+        TWIC_PROPERTY_R /* permits reads */ |
+        TWIC_PROPERTY_W /* permits writes */ |
+        TWIC_PROPERTY_N /* permits notifications */ |
+        TWIC_PROPERTY_I /* permits indications */,
+#endif
+        0x703, twic_util_hr_control_point,
         sizeof(twic_util_hr_control_point),
         0, 0, NULL, 0
       },
@@ -701,46 +720,6 @@ TWIC_CONN_APP_DEF(pnet1, EIDX_NUM) = {
   &twic_util_entry_uu_data_desc,
 #endif /* TWIC_UTIL_UU_SERVICE */
 };
-
-/* @brief Initialize GATT Service.
- * This API creates and initializes each GATT Service which is defined
- * in the tz1sm_config.h
- * This API can be invoked after the "twicUtLeCeInit3" succeeds.
- * The following GATT Services can be used if the each preprocessor is
- * defined.
- * GA Service Descripter and Characteristic attribute data.
- * TWIC_UTIL_GA_SERVICE
- * DI Service Descripter and Characteristic attribute data.
- * TWIC_UTIL_DI_SERVICE
- * HR Service Descripter and Characteristic attribute data.
- * TWIC_UTIL_HR_SERVICE
- * Blood Pressure Service Descripter and Characteristic attribute data.
- * TWIC_UTIL_BP_SERVICE
- * User Data Service Descripter and Characteristic attribute data.
- * TWIC_UTIL_UD_SERVICE
- * CT Service Descripter and Characteristic attribute data.
- * TWIC_UTIL_CT_SERVICE
- * Next DST Change Service
- * TWIC_UTIL_NC_SERVICE
- * Reference Time Update Service
- * TWIC_UTIL_RU_SERVICE
- * Immediate Alert Service
- * TWIC_UTIL_IA_SERVICE
- * Health Thermometer Service
- * TWIC_UTIL_HT_SERVICE
- * User defined Service 128bit UUID (Experimental Temporary 128bit Service)
- * TWIC_UTIL_UU_SERVICE
- * TWIC_UTIL_UU_CHARACTERISTICS
- * ANCS
- * TWIC_UTIL_ANCS
- *
- * @param twicConnIface_t * const conn_iface
- * The pointer of the element of the GATT's resource to be used by
- * this interface.
- *
- * @return
- * TWIC_STATUS_OK: Success
- * Other: Failed */
 
 twicStatus_t twicUtInitGattService(twicConnIface_t *const cif)
 {

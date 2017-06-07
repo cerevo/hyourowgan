@@ -1,7 +1,7 @@
 /**
  * @file twic_button.c
- * @brief a source file for TZ10xx TWiC for Bluetooth 4.0 Smart
- * @version V0.0.3
+ * @brief a source file for TZ10xx TWiC for Bluetooth 4.0/4.1 Smart
+ * @version V1.2.0
  * @note
  */
 
